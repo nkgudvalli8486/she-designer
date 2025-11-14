@@ -1,0 +1,14 @@
+{
+  "name": "@nts/config",
+  "version": "0.1.0",
+  "private": true,
+  "license": "MIT",
+  "files": [
+    "tailwind-preset.js"
+  ],
+  "dependencies": {
+    "tailwindcss-animate": "^1.0.7"
+  }
+}
+
+
