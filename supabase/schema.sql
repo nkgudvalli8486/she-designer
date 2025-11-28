@@ -146,36 +146,59 @@ alter table public.product_images add column if not exists image_url text;
 alter table public.product_images add column if not exists alt_text text default '' not null;
 alter table public.product_images add column if not exists position int default 0;
 
--- Cart (session-scoped)
-create table if not exists public.cart_items (
-  id uuid primary key default gen_random_uuid(),
-  session_id text not null,
-  product_id uuid references public.products(id) on delete cascade,
-  quantity int not null default 1 check (quantity > 0),
-  created_at timestamptz default now(),
-  updated_at timestamptz default now()
-);
-create index if not exists idx_cart_session on public.cart_items(session_id);
-create unique index if not exists uniq_cart_session_product on public.cart_items(session_id, product_id);
-
--- Wishlist (session-scoped)
-create table if not exists public.wishlist_items (
-  id uuid primary key default gen_random_uuid(),
-  session_id text not null,
-  product_id uuid references public.products(id) on delete cascade,
-  created_at timestamptz default now()
-);
-create index if not exists idx_wishlist_session on public.wishlist_items(session_id);
-create unique index if not exists uniq_wishlist_session_product on public.wishlist_items(session_id, product_id);
-
+-- Customers table must be created first (referenced by other tables)
 create table if not exists public.customers (
   id uuid primary key default gen_random_uuid(),
   auth_user_id uuid unique,
   name text,
   email text unique,
-  phone text,
+  phone text unique,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+
+-- Cart (session-scoped)
+create table if not exists public.cart_items (
+  id uuid primary key default gen_random_uuid(),
+  session_id text,
+  customer_id uuid references public.customers(id) on delete cascade,
+  product_id uuid references public.products(id) on delete cascade,
+  quantity int not null default 1 check (quantity > 0),
+  created_at timestamptz default now(),
+  updated_at timestamptz default now(),
+  check ((session_id is not null) or (customer_id is not null))
+);
+create index if not exists idx_cart_session on public.cart_items(session_id);
+create index if not exists idx_cart_customer on public.cart_items(customer_id);
+create unique index if not exists uniq_cart_session_product on public.cart_items(session_id, product_id) where session_id is not null;
+create unique index if not exists uniq_cart_customer_product on public.cart_items(customer_id, product_id) where customer_id is not null;
+
+-- Wishlist (session-scoped)
+create table if not exists public.wishlist_items (
+  id uuid primary key default gen_random_uuid(),
+  session_id text,
+  customer_id uuid references public.customers(id) on delete cascade,
+  product_id uuid references public.products(id) on delete cascade,
+  created_at timestamptz default now(),
+  check ((session_id is not null) or (customer_id is not null))
+);
+create index if not exists idx_wishlist_session on public.wishlist_items(session_id);
+create index if not exists idx_wishlist_customer on public.wishlist_items(customer_id);
+create unique index if not exists uniq_wishlist_session_product on public.wishlist_items(session_id, product_id) where session_id is not null;
+create unique index if not exists uniq_wishlist_customer_product on public.wishlist_items(customer_id, product_id) where customer_id is not null;
+
+-- OTP table for mobile authentication
+create table if not exists public.otp_verifications (
+  id uuid primary key default gen_random_uuid(),
+  phone text not null,
+  otp_code text not null,
+  expires_at timestamptz not null,
+  verified boolean default false,
+  attempts int default 0,
   created_at timestamptz default now()
 );
+create index if not exists idx_otp_phone on public.otp_verifications(phone);
+create index if not exists idx_otp_expires on public.otp_verifications(expires_at);
 
 create table if not exists public.addresses (
   id uuid primary key default gen_random_uuid(),
@@ -188,6 +211,63 @@ create table if not exists public.addresses (
   postal_code text not null,
   country text not null default 'IN'
 );
+
+-- Session-scoped checkout address support (guest users)
+alter table public.addresses add column if not exists session_id text;
+alter table public.addresses add column if not exists name text;
+alter table public.addresses add column if not exists phone text;
+alter table public.addresses add column if not exists area text;
+alter table public.addresses add column if not exists landmark text;
+alter table public.addresses add column if not exists address_type text default 'HOME';
+alter table public.addresses add column if not exists is_default boolean default false;
+alter table public.addresses add column if not exists created_at timestamptz default now();
+create index if not exists idx_addresses_session on public.addresses(session_id);
+
+-- Addresses RLS and open policies for anon (session-scoped guest checkout)
+alter table public.addresses enable row level security;
+do $$
+begin
+  if not exists (select 1 from pg_policies where schemaname='public' and tablename='addresses' and policyname='Public read addresses') then
+    create policy "Public read addresses" on public.addresses for select to anon using (true);
+  end if;
+end $$;
+do $$
+begin
+  if not exists (select 1 from pg_policies where schemaname='public' and tablename='addresses' and policyname='Public write addresses') then
+    create policy "Public write addresses" on public.addresses for insert to anon with check (true);
+  end if;
+end $$;
+do $$
+begin
+  if not exists (select 1 from pg_policies where schemaname='public' and tablename='addresses' and policyname='Public update addresses') then
+    create policy "Public update addresses" on public.addresses for update to anon using (true) with check (true);
+  end if;
+end $$;
+do $$
+begin
+  if not exists (select 1 from pg_policies where schemaname='public' and tablename='addresses' and policyname='Public delete addresses') then
+    create policy "Public delete addresses" on public.addresses for delete to anon using (true);
+  end if;
+end $$;
+
+-- Contact messages (public submissions)
+create table if not exists public.contact_messages (
+  id uuid primary key default gen_random_uuid(),
+  name text,
+  email text,
+  phone text,
+  subject text,
+  message text not null,
+  metadata jsonb,
+  created_at timestamptz default now()
+);
+alter table public.contact_messages enable row level security;
+do $$
+begin
+  if not exists (select 1 from pg_policies where schemaname='public' and tablename='contact_messages' and policyname='Public insert contact_messages') then
+    create policy "Public insert contact_messages" on public.contact_messages for insert to anon with check (true);
+  end if;
+end $$;
 
 -- Create enum types if they don't already exist
 do $$ begin
