@@ -10,7 +10,16 @@ const nextConfig: NextConfig = {
     }
   },
   // Silence monorepo root inference warning
-  outputFileTracingRoot: path.join(__dirname, '../..')
+  outputFileTracingRoot: path.join(__dirname, '../..'),
+  async redirects() {
+    return [
+      {
+        source: '/home',
+        destination: '/',
+        permanent: true,
+      },
+    ];
+  },
 };
 
 export default nextConfig;
