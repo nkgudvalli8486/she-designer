@@ -53,6 +53,13 @@ export function UserProfile() {
     
     // Reload on auth events
     const handleAuthChange = () => {
+      const token = getAuthTokenClient();
+      if (!token) {
+        // If no token, clear user state immediately
+        setUser(null);
+        setLoading(false);
+        return;
+      }
       setTimeout(loadUser, 100); // Small delay to ensure cookies are set
     };
     window.addEventListener('auth:changed', handleAuthChange);
@@ -65,6 +72,10 @@ export function UserProfile() {
       const token = getAuthTokenClient();
       if (token && !user) {
         loadUser();
+      } else if (!token && user) {
+        // If token was removed (logout), clear user state
+        setUser(null);
+        setLoading(false);
       }
       if (checkCount >= maxChecks) {
         clearInterval(interval);
@@ -78,20 +89,30 @@ export function UserProfile() {
   }, []);
 
   const handleLogout = async () => {
+    // Clear both cookies immediately
+    document.cookie = 'auth_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
+    document.cookie = 'auth_token_client=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
+    
+    // Clear user state immediately
+    setUser(null);
+    setLoading(false);
+    setShowMenu(false);
+    
     try {
-      await fetch('/api/auth/logout', { method: 'POST' });
-      // Clear client-side token by removing cookie
-      document.cookie = 'auth_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
-      setUser(null);
-      setShowMenu(false);
-      if (typeof window !== 'undefined') {
-        window.dispatchEvent(new Event('auth:changed'));
-      }
-      router.push('/');
-      router.refresh();
+      // Try to call logout API, but don't wait for it if it fails
+      fetch('/api/auth/logout', { method: 'POST' }).catch(() => {
+        // Silently fail - we've already cleared local state
+      });
     } catch (err) {
-      console.error('Logout failed:', err);
+      // Ignore fetch errors
     }
+    
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new Event('auth:changed'));
+    }
+    
+    router.push('/');
+    router.refresh();
   };
 
   if (loading) {

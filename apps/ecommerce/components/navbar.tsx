@@ -46,10 +46,21 @@ export function Navbar() {
     };
     load();
     const onChanged = () => load();
+    const onAuthChanged = () => {
+      // Clear wishlist count on logout
+      const token = getAuthTokenClient();
+      if (!token) {
+        setWishCount(0);
+      } else {
+        load();
+      }
+    };
     window.addEventListener('wishlist:changed', onChanged);
+    window.addEventListener('auth:changed', onAuthChanged);
     return () => {
       aborted = true;
       window.removeEventListener('wishlist:changed', onChanged);
+      window.removeEventListener('auth:changed', onAuthChanged);
     };
   }, []);
 
@@ -78,10 +89,21 @@ export function Navbar() {
 		};
 		loadCart();
 		const onCartChanged = () => loadCart();
+		const onAuthChanged = () => {
+			// Clear cart count on logout
+			const token = getAuthTokenClient();
+			if (!token) {
+				setCartCount(0);
+			} else {
+				loadCart();
+			}
+		};
 		window.addEventListener('cart:changed', onCartChanged);
+		window.addEventListener('auth:changed', onAuthChanged);
 		return () => {
 			aborted = true;
 			window.removeEventListener('cart:changed', onCartChanged);
+			window.removeEventListener('auth:changed', onAuthChanged);
 		};
 	}, []);
   return (
