@@ -20,39 +20,14 @@ export async function POST(req: NextRequest) {
   const { phone, otp } = parsed.data;
   
   try {
-    const supabase = getSupabaseServerClient();
-    const formattedPhone = `+91${phone}`;
-    
-    // Try Supabase Auth verification first
-    let authUserId: string | null = null;
-    try {
-      const { data: authData, error: verifyError } = await supabase.auth.verifyOtp({
-        phone: formattedPhone,
-        token: otp,
-        type: 'sms'
-      });
-
-      if (!verifyError && authData.user) {
-        authUserId = authData.user.id;
-      }
-    } catch (supabaseError: any) {
-      // If Supabase phone auth is disabled, fall back to custom OTP
-      if (supabaseError.code === 'phone_provider_disabled' || supabaseError.message?.includes('phone provider')) {
-        console.log('Supabase phone auth disabled, using custom OTP verification');
-        // Fall through to custom OTP verification below
-      } else {
-        // Other Supabase error - try custom OTP as fallback
-        console.log('Supabase verification failed, trying custom OTP');
-      }
+    // Use custom OTP verification only (no Supabase phone auth/Twilio)
+    const isValid = await verifyOTP(phone, otp);
+    if (!isValid) {
+      return NextResponse.json({ error: 'Invalid or expired OTP' }, { status: 400 });
     }
     
-    // If Supabase Auth didn't work, use custom OTP verification
-    if (!authUserId) {
-      const isValid = await verifyOTP(phone, otp);
-      if (!isValid) {
-        return NextResponse.json({ error: 'Invalid or expired OTP' }, { status: 400 });
-      }
-    }
+    // No Supabase Auth user ID since we're not using Supabase phone auth
+    const authUserId: string | null = null;
 
     // Get or create customer record
     // Use admin client to bypass RLS for customer creation

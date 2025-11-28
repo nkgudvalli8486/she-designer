@@ -86,13 +86,42 @@ export async function POST(req: NextRequest) {
   if (authResult instanceof NextResponse) return authResult;
   
   const { userId } = authResult;
-  const { productId } = await req.json().catch(() => ({ productId: '' }));
-  if (!productId) return NextResponse.json({ error: 'Missing productId' }, { status: 400 });
+  let body;
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
+  }
+  const { productId } = body;
+  if (!productId || typeof productId !== 'string') {
+    return NextResponse.json({ error: 'Missing or invalid productId' }, { status: 400 });
+  }
+  
   const supabase = getSupabaseServerClient();
+  
+  // Check if item already exists
+  const { data: existing } = await supabase
+    .from('wishlist_items')
+    .select('id')
+    .eq('customer_id', userId)
+    .eq('product_id', productId)
+    .single();
+  
+  if (existing) {
+    // Already in wishlist, return success
+    return NextResponse.json({ ok: true });
+  }
+  
+  // Insert new item
   const { error } = await supabase
     .from('wishlist_items')
-    .upsert({ customer_id: userId, product_id: productId }, { onConflict: 'customer_id,product_id' });
-  if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    .insert({ customer_id: userId, product_id: productId });
+  
+  if (error) {
+    console.error('Wishlist insert error:', error);
+    return NextResponse.json({ error: error.message || 'Failed to add to wishlist' }, { status: 400 });
+  }
+  
   return NextResponse.json({ ok: true });
 }
 

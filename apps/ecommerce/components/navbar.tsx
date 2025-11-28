@@ -178,14 +178,14 @@ export function Navbar() {
           <Link
             href="/wishlist"
             className="relative inline-flex h-9 w-9 items-center justify-center rounded-md border border-neutral-700"
-            aria-label="Wishlist"
+            aria-label={`Wishlist${wishCount > 0 ? ` (${wishCount} items)` : ''}`}
           >
             <Heart size={18} />
-            {wishCount > 0 ? (
-              <span className="absolute -top-1 -right-1 min-w-[1.25rem] h-5 rounded-full bg-pink-600 text-white text-[10px] leading-none px-1 flex items-center justify-center">
+            {wishCount > 0 && (
+              <span className="absolute -top-1 -right-1 min-w-[1.25rem] h-5 rounded-full bg-pink-600 text-white text-[10px] font-semibold leading-none px-1.5 flex items-center justify-center border-2 border-neutral-900">
                 {wishCount > 99 ? '99+' : wishCount}
               </span>
-            ) : null}
+            )}
           </Link>
           <Link
             href="/cart"
