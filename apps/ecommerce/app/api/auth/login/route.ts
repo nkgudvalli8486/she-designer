@@ -21,12 +21,11 @@ export async function POST(req: NextRequest) {
     const otp = await generateOTP(phone);
     await sendOTP(phone, otp);
     
-    // In development/pre-production, return OTP so it can be displayed in UI
-    const isDev = process.env.NODE_ENV === 'development' || process.env.NODE_ENV !== 'production' || !process.env.SMS_PROVIDER;
+    // Always return OTP so it can be displayed in UI (same as local)
     return NextResponse.json({ 
       ok: true, 
       message: 'OTP sent successfully',
-      ...(isDev && { devOtp: otp }) // Include OTP in dev/pre-prod mode
+      devOtp: otp // Always include OTP for UI display
     });
   } catch (err) {
     console.error('Login error:', err);
