@@ -10,8 +10,9 @@ const VariantPatchSchema = z.object({
   isActive: z.boolean().optional()
 });
 
-export async function PATCH(req: NextRequest, ctx: { params: { variantId: string } }) {
-  const id = ctx.params.variantId;
+export async function PATCH(req: NextRequest, ctx: { params: Promise<{ variantId: string }> }) {
+  const { variantId } = await ctx.params;
+  const id = variantId;
   const body = await req.json().catch(() => ({}));
   const parsed = VariantPatchSchema.safeParse(body);
   if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
@@ -27,8 +28,9 @@ export async function PATCH(req: NextRequest, ctx: { params: { variantId: string
   return NextResponse.json({ ok: true });
 }
 
-export async function DELETE(req: NextRequest, ctx: { params: { variantId: string } }) {
-  const id = ctx.params.variantId;
+export async function DELETE(req: NextRequest, ctx: { params: Promise<{ variantId: string }> }) {
+  const { variantId } = await ctx.params;
+  const id = variantId;
   const supabase = getSupabaseAdminClient();
   const { error } = await supabase.from('product_variants').delete().eq('id', id);
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });

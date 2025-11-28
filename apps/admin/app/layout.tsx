@@ -4,7 +4,7 @@ import { Sidebar } from '@/components/sidebar';
 import { Topbar } from '@/components/topbar';
 
 export const metadata: Metadata = {
-	title: 'Blush by Mounika – Admin',
+	title: 'She Designer – Admin',
 	description: 'Admin dashboard for products, orders, customers, and CMS.'
 };
 

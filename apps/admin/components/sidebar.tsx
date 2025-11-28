@@ -39,7 +39,7 @@ export function Sidebar() {
 					) : (
 						<Link
 							key={it.href}
-							href={it.href!}
+							href={it.href! as any}
 							className={clsx(
 								'flex items-center gap-3 px-3 py-2 rounded-md text-sm text-neutral-200 hover:bg-neutral-800 hover:text-white',
 								pathname === it.href && 'bg-neutral-800 text-white'

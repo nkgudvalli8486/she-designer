@@ -1,5 +1,6 @@
 import type { Config } from 'tailwindcss';
-import preset from '@nts/config/tailwind-preset.js';
+// @ts-ignore - workspace package
+import preset from '../../packages/config/tailwind-preset.js';
 
 export default {
   presets: [preset as unknown as Config],
