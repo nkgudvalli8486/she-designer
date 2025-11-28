@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { getAuthHeaders } from '@/src/lib/auth-client';
 
 export function AddToCart(props: { productId: string; disabled?: boolean }) {
   const [submitting, setSubmitting] = useState(false);
@@ -13,7 +14,7 @@ export function AddToCart(props: { productId: string; disabled?: boolean }) {
     let cancelled = false;
     const check = async () => {
       try {
-        const res = await fetch('/api/public/cart', { cache: 'no-store' });
+        const res = await fetch('/api/public/cart', { cache: 'no-store', headers: getAuthHeaders() });
         const json = await res.json().catch(() => ({ data: [] }));
         const items: Array<{ productId: string }> = Array.isArray(json?.data) ? json.data : [];
         if (!cancelled) {
@@ -37,7 +38,7 @@ export function AddToCart(props: { productId: string; disabled?: boolean }) {
   }, [props.productId]);
   return (
     <button
-      className="h-10 px-4 rounded-md bg-primary text-primary-foreground disabled:opacity-50 disabled:cursor-not-allowed"
+      className="h-10 w-full sm:w-auto px-4 rounded-md bg-primary text-primary-foreground disabled:opacity-50 disabled:cursor-not-allowed text-sm sm:text-base"
       disabled={props.disabled || submitting}
       onClick={async () => {
         if (done) {
@@ -48,7 +49,7 @@ export function AddToCart(props: { productId: string; disabled?: boolean }) {
           setSubmitting(true);
           const res = await fetch('/api/public/cart', {
             method: 'POST',
-            headers: { 'content-type': 'application/json' },
+            headers: { 'content-type': 'application/json', ...getAuthHeaders() },
             body: JSON.stringify({ productId: props.productId, quantity: 1 })
           });
           if (res.ok) {
@@ -56,6 +57,10 @@ export function AddToCart(props: { productId: string; disabled?: boolean }) {
             if (typeof window !== 'undefined') {
               window.dispatchEvent(new Event('cart:changed'));
             }
+          } else if (res.status === 401) {
+            // Redirect to login if not authenticated
+            const currentPath = window.location.pathname;
+            router.push(`/login?redirect=${encodeURIComponent(currentPath)}`);
           }
         } finally {
           setSubmitting(false);

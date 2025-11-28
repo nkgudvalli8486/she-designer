@@ -48,10 +48,10 @@ export function CategoryCarousel(props: { items: CategoryItem[]; autoMs?: number
         {items.map((it) => (
           <Link
             key={it.href}
-            href={it.href}
-            className="w-[160px] flex-shrink-0 snap-start text-center"
+            href={it.href as any}
+            className="w-[140px] sm:w-[160px] flex-shrink-0 snap-start text-center"
           >
-            <div className="mx-auto size-36 rounded-full overflow-hidden ring-1 ring-neutral-700 bg-neutral-800">
+            <div className="mx-auto size-28 sm:size-36 rounded-full overflow-hidden ring-1 ring-neutral-700 bg-neutral-800">
               <img
                 src={it.image}
                 alt={it.label}
@@ -59,7 +59,7 @@ export function CategoryCarousel(props: { items: CategoryItem[]; autoMs?: number
                 loading="lazy"
               />
             </div>
-            <div className="mt-2 text-sm text-neutral-200">{it.label}</div>
+            <div className="mt-2 text-xs sm:text-sm text-neutral-200">{it.label}</div>
           </Link>
         ))}
       </div>

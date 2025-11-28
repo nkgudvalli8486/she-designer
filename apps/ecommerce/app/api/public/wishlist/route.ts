@@ -3,6 +3,8 @@ import { cookies } from 'next/headers';
 import { getSupabaseServerClient } from '@/src/lib/supabase-server';
 import { rateLimit } from '@/src/lib/rate-limit';
 import { randomUUID } from 'crypto';
+import { requireAuth } from '@/src/lib/auth-middleware';
+import { getAuthToken, verifyAuthToken } from '@/src/lib/auth';
 
 function getClientIp(req: NextRequest) {
   return (
@@ -32,12 +34,17 @@ export async function GET(req: NextRequest) {
   const ip = getClientIp(req);
   const rl = rateLimit(`wishlist:${ip}`, 120, 60_000);
   if (!rl.ok) return new NextResponse('Too Many Requests', { status: 429 });
-  const sid = await getOrCreateSessionId();
+  
+  // Require authentication for wishlist access
+  const authResult = await requireAuth(req);
+  if (authResult instanceof NextResponse) return authResult;
+  
+  const { userId } = authResult;
   const supabase = getSupabaseServerClient();
   const { data: items, error } = await supabase
     .from('wishlist_items')
     .select('product_id, created_at')
-    .eq('session_id', sid)
+    .eq('customer_id', userId)
     .order('created_at', { ascending: false });
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
   if (!items?.length) return NextResponse.json({ data: [] });
@@ -73,13 +80,18 @@ export async function POST(req: NextRequest) {
   const ip = getClientIp(req);
   const rl = rateLimit(`wishlist:${ip}`, 90, 60_000);
   if (!rl.ok) return new NextResponse('Too Many Requests', { status: 429 });
-  const sid = await getOrCreateSessionId();
+  
+  // Require authentication for wishlist operations
+  const authResult = await requireAuth(req);
+  if (authResult instanceof NextResponse) return authResult;
+  
+  const { userId } = authResult;
   const { productId } = await req.json().catch(() => ({ productId: '' }));
   if (!productId) return NextResponse.json({ error: 'Missing productId' }, { status: 400 });
   const supabase = getSupabaseServerClient();
   const { error } = await supabase
     .from('wishlist_items')
-    .upsert({ session_id: sid, product_id: productId }, { onConflict: 'session_id,product_id' });
+    .upsert({ customer_id: userId, product_id: productId }, { onConflict: 'customer_id,product_id' });
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
   return NextResponse.json({ ok: true });
 }
@@ -88,12 +100,17 @@ export async function DELETE(req: NextRequest) {
   const ip = getClientIp(req);
   const rl = rateLimit(`wishlist:${ip}`, 90, 60_000);
   if (!rl.ok) return new NextResponse('Too Many Requests', { status: 429 });
-  const sid = await getOrCreateSessionId();
+  
+  // Require authentication for wishlist operations
+  const authResult = await requireAuth(req);
+  if (authResult instanceof NextResponse) return authResult;
+  
+  const { userId } = authResult;
   const url = new URL(req.url);
   const productId = url.searchParams.get('productId') || '';
   if (!productId) return NextResponse.json({ error: 'Missing productId' }, { status: 400 });
   const supabase = getSupabaseServerClient();
-  const { error } = await supabase.from('wishlist_items').delete().match({ session_id: sid, product_id: productId });
+  const { error } = await supabase.from('wishlist_items').delete().match({ customer_id: userId, product_id: productId });
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
   return NextResponse.json({ ok: true });
 }

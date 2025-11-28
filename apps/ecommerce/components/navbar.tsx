@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { ShoppingCart, Heart, Search, Menu, X, ChevronDown } from 'lucide-react';
+import { getAuthHeaders, getAuthTokenClient } from '@/src/lib/auth-client';
 
 const navItems: Array<{ label: string; href: string }> = [
   { label: 'Clothing', href: '/collections/clothing' },
@@ -25,12 +26,23 @@ export function Navbar() {
   useEffect(() => {
     let aborted = false;
     const load = async () => {
+      // Only fetch if user is authenticated
+      const token = getAuthTokenClient();
+      if (!token) {
+        if (!aborted) setWishCount(0);
+        return;
+      }
       try {
-        const res = await fetch('/api/public/wishlist', { cache: 'no-store' });
-        if (!res.ok) return;
+        const res = await fetch('/api/public/wishlist', { cache: 'no-store', headers: getAuthHeaders() });
+        if (!res.ok) {
+          if (!aborted) setWishCount(0);
+          return;
+        }
         const json = await res.json();
         if (!aborted) setWishCount(Array.isArray(json?.data) ? json.data.length : 0);
-      } catch {}
+      } catch {
+        if (!aborted) setWishCount(0);
+      }
     };
     load();
     const onChanged = () => load();
@@ -44,14 +56,25 @@ export function Navbar() {
 	useEffect(() => {
 		let aborted = false;
 		const loadCart = async () => {
+			// Only fetch if user is authenticated
+			const token = getAuthTokenClient();
+			if (!token) {
+				if (!aborted) setCartCount(0);
+				return;
+			}
 			try {
-				const res = await fetch('/api/public/cart', { cache: 'no-store' });
-				if (!res.ok) return;
+				const res = await fetch('/api/public/cart', { cache: 'no-store', headers: getAuthHeaders() });
+				if (!res.ok) {
+					if (!aborted) setCartCount(0);
+					return;
+				}
 				const json = await res.json();
 				const items: Array<{ quantity?: number }> = Array.isArray(json?.data) ? json.data : [];
 				const total = items.reduce((sum, it) => sum + (Number(it.quantity) || 0), 0);
 				if (!aborted) setCartCount(total);
-			} catch {}
+			} catch {
+				if (!aborted) setCartCount(0);
+			}
 		};
 		loadCart();
 		const onCartChanged = () => loadCart();
@@ -73,7 +96,7 @@ export function Navbar() {
             {open ? <X size={18} /> : <Menu size={18} />}
           </button>
           <Link href="/" className="text-xl font-semibold tracking-tight">
-            Blush by Mounika
+            She Designer
           </Link>
         </div>
         <nav className="hidden md:flex items-center gap-6 text-sm">
@@ -84,12 +107,12 @@ export function Navbar() {
             <button className="inline-flex items-center gap-1 text-neutral-400 hover:text-white">
               Shop <ChevronDown size={14} />
             </button>
-            <div className="invisible absolute left-0 top-full z-40 w-[680px] translate-y-2 rounded-md border border-neutral-800 bg-neutral-900 p-4 opacity-0 shadow-lg transition-all group-hover:visible group-hover:translate-y-0 group-hover:opacity-100">
-              <div className="grid grid-cols-2 gap-3">
+            <div className="invisible absolute left-0 top-full z-40 w-[280px] sm:w-[400px] md:w-[680px] translate-y-2 rounded-md border border-neutral-800 bg-neutral-900 p-4 opacity-0 shadow-lg transition-all group-hover:visible group-hover:translate-y-0 group-hover:opacity-100">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {navItems.map((i) => (
                   <Link
                     key={i.href}
-                    href={i.href}
+                    href={i.href as any}
                     className="rounded-md px-2 py-2 text-sm text-neutral-200 hover:bg-neutral-800 hover:text-white"
                   >
                     {i.label}
@@ -102,12 +125,12 @@ export function Navbar() {
             <button className="inline-flex items-center gap-1 text-neutral-400 hover:text-white">
               Accessories <ChevronDown size={14} />
             </button>
-            <div className="invisible absolute left-0 top-full z-40 w-[360px] translate-y-2 rounded-md border border-neutral-800 bg-neutral-900 p-4 opacity-0 shadow-lg transition-all group-hover:visible group-hover:translate-y-0 group-hover:opacity-100">
+            <div className="invisible absolute left-0 top-full z-40 w-[200px] sm:w-[280px] md:w-[360px] translate-y-2 rounded-md border border-neutral-800 bg-neutral-900 p-4 opacity-0 shadow-lg transition-all group-hover:visible group-hover:translate-y-0 group-hover:opacity-100">
               <div className="grid grid-cols-1 gap-3">
                 {['Jewellery', 'Bags', 'Footwear', 'Dupattas'].map((name) => (
                   <Link
                     key={name}
-                    href={`/collections/${name.toLowerCase()}`}
+                    href={`/collections/${name.toLowerCase()}` as any}
                     className="rounded-md px-2 py-2 text-sm text-neutral-200 hover:bg-neutral-800 hover:text-white"
                   >
                     {name}
@@ -116,10 +139,10 @@ export function Navbar() {
               </div>
             </div>
           </div>
-          <Link href="/gift-card" className="text-neutral-400 hover:text-white">
+          <Link href={"/gift-card" as any} className="text-neutral-400 hover:text-white">
             Gift Card
           </Link>
-          <Link href="/faqs" className="text-neutral-400 hover:text-white">
+          <Link href={"/faqs" as any} className="text-neutral-400 hover:text-white">
             FAQs
           </Link>
           <Link href="/contact" className="text-neutral-400 hover:text-white">
@@ -165,7 +188,7 @@ export function Navbar() {
             {navItems.map((item) => (
               <Link
                 key={item.href}
-                href={item.href}
+                href={item.href as any}
                 className="py-2 text-sm text-neutral-400 hover:text-white"
                 onClick={() => setOpen(false)}
               >
@@ -175,17 +198,17 @@ export function Navbar() {
             {['Jewellery', 'Bags', 'Footwear', 'Dupattas'].map((name) => (
               <Link
                 key={name}
-                href={`/collections/${name.toLowerCase()}`}
+                href={`/collections/${name.toLowerCase()}` as any}
                 className="py-2 text-sm text-neutral-400 hover:text-white"
                 onClick={() => setOpen(false)}
               >
                 {name}
               </Link>
             ))}
-            <Link href="/gift-card" className="py-2 text-sm text-neutral-400 hover:text-white" onClick={() => setOpen(false)}>
+            <Link href={"/gift-card" as any} className="py-2 text-sm text-neutral-400 hover:text-white" onClick={() => setOpen(false)}>
               Gift Card
             </Link>
-            <Link href="/faqs" className="py-2 text-sm text-neutral-400 hover:text-white" onClick={() => setOpen(false)}>
+            <Link href={"/faqs" as any} className="py-2 text-sm text-neutral-400 hover:text-white" onClick={() => setOpen(false)}>
               FAQs
             </Link>
             <Link href="/contact" className="py-2 text-sm text-neutral-400 hover:text-white" onClick={() => setOpen(false)}>

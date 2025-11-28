@@ -1,16 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
-import { getSupabaseServerClient } from '@/src/lib/supabase-server';
-import { rateLimit } from '@/src/lib/rate-limit';
 import { randomUUID } from 'crypto';
+import { getSupabaseServerClient } from '@/src/lib/supabase-server';
+import { requireAuth } from '@/src/lib/auth-middleware';
+import { getAuthToken, verifyAuthToken } from '@/src/lib/auth';
 
-function getClientIp(req: NextRequest) {
-  return (
-    req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
-    req.headers.get('x-real-ip') ||
-    'anon'
-  );
-}
 async function getOrCreateSessionId() {
   const store = await cookies();
   let sid = store.get('sid')?.value;
@@ -28,118 +22,141 @@ async function getOrCreateSessionId() {
 }
 
 export async function GET(req: NextRequest) {
-  const ip = getClientIp(req);
-  const rl = rateLimit(`cart:${ip}`, 120, 60_000);
-  if (!rl.ok) return new NextResponse('Too Many Requests', { status: 429 });
-  const sid = await getOrCreateSessionId();
+  // Require authentication for cart access
+  const authResult = await requireAuth(req);
+  if (authResult instanceof NextResponse) return authResult;
+  
+  const { userId } = authResult;
   const supabase = getSupabaseServerClient();
   const { data: items, error } = await supabase
     .from('cart_items')
-    .select('product_id, quantity')
-    .eq('session_id', sid)
+    .select('product_id, quantity, created_at')
+    .eq('customer_id', userId)
     .order('created_at', { ascending: true });
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
   if (!items?.length) return NextResponse.json({ data: [] });
-  const ids = items.map((it) => it.product_id);
+
+  const ids = items.map((x) => x.product_id);
   const { data: products } = await supabase
     .from('products')
-    .select('id, name, slug, price_cents, sale_price_cents')
+    .select('id, name, slug, price_cents, sale_price_cents, original_price_cents, product_images (image_url, position)')
     .in('id', ids);
-  const { data: imgs } = await supabase
-    .from('product_images')
-    .select('product_id, image_url, position')
-    .in('product_id', ids)
-    .order('position', { ascending: true });
+
   const firstImage: Record<string, string | null> = {};
-  for (const im of imgs ?? []) {
-    const pid = (im as any).product_id as string;
-    if (!(pid in firstImage)) firstImage[pid] = ((im as any).image_url) ?? null;
+  for (const p of products ?? []) {
+    const pid = (p as any).id as string;
+    const imgs = (p as any).product_images as Array<{ image_url?: string | null; position?: number }> | undefined;
+    if (Array.isArray(imgs) && imgs.length) {
+      const sorted = imgs.length > 1 ? [...imgs].sort((a, b) => (Number(a?.position ?? 0) - Number(b?.position ?? 0))) : imgs;
+      const top = sorted[0];
+      const imageUrl = (top?.image_url as string | null | undefined) ?? null;
+      if (imageUrl) firstImage[pid] = imageUrl;
+    }
   }
+
   const prodMap = new Map((products ?? []).map((p: any) => [p.id, p]));
   const result = items.map((it) => {
-    const p = prodMap.get(it.product_id);
-    const price = (p?.sale_price_cents ?? p?.price_cents ?? 0) / 100;
-    return { productId: it.product_id, name: p?.name, slug: p?.slug, price, quantity: it.quantity, image: firstImage[it.product_id] ?? null };
+    const p = prodMap.get(it.product_id) as any;
+    const priceCents = Number(p?.sale_price_cents ?? p?.price_cents ?? 0);
+    const originalCents = Number(p?.original_price_cents ?? p?.price_cents ?? priceCents);
+    return {
+      productId: it.product_id,
+      quantity: it.quantity,
+      name: p?.name,
+      slug: p?.slug,
+      price: priceCents / 100,
+      originalPrice: originalCents / 100,
+      image: firstImage[it.product_id] ?? null
+    };
   });
   return NextResponse.json({ data: result });
 }
 
 export async function POST(req: NextRequest) {
-  const ip = getClientIp(req);
-  const rl = rateLimit(`cart:${ip}`, 90, 60_000);
-  if (!rl.ok) return new NextResponse('Too Many Requests', { status: 429 });
-  const sid = await getOrCreateSessionId();
+  // Require authentication for cart operations
+  const authResult = await requireAuth(req);
+  if (authResult instanceof NextResponse) return authResult;
+  
+  const { userId } = authResult;
   const { productId, quantity } = await req.json().catch(() => ({ productId: '', quantity: 1 }));
   if (!productId) return NextResponse.json({ error: 'Missing productId' }, { status: 400 });
-  const qty = Math.max(1, parseInt(String(quantity || 1), 10));
+  const qty = Math.max(1, Number(quantity ?? 1));
   const supabase = getSupabaseServerClient();
-  const { error } = await supabase
+  
+  // Check if item already exists
+  const { data: existing } = await supabase
     .from('cart_items')
-    .upsert({ session_id: sid, product_id: productId, quantity: qty }, { onConflict: 'session_id,product_id' });
-  if (error) return NextResponse.json({ error: error.message }, { status: 400 });
-  return NextResponse.json({ ok: true });
-}
-
-export async function DELETE(req: NextRequest) {
-  const ip = getClientIp(req);
-  const rl = rateLimit(`cart:${ip}`, 90, 60_000);
-  if (!rl.ok) return new NextResponse('Too Many Requests', { status: 429 });
-  const sid = await getOrCreateSessionId();
-  const url = new URL(req.url);
-  const productId = url.searchParams.get('productId') || '';
-  if (!productId) return NextResponse.json({ error: 'Missing productId' }, { status: 400 });
-  const supabase = getSupabaseServerClient();
-  const { error } = await supabase.from('cart_items').delete().match({ session_id: sid, product_id: productId });
-  if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    .select('id, quantity')
+    .eq('customer_id', userId)
+    .eq('product_id', productId)
+    .maybeSingle();
+  
+  if (existing) {
+    // Update existing item
+    const { error } = await supabase
+      .from('cart_items')
+      .update({ quantity: qty })
+      .eq('id', existing.id);
+    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+  } else {
+    // Insert new item - explicitly set session_id to null for authenticated users
+    const { error } = await supabase
+      .from('cart_items')
+      .insert({ 
+        customer_id: userId, 
+        product_id: productId, 
+        quantity: qty,
+        session_id: null // Explicitly set to null for authenticated users
+      });
+    if (error) {
+      console.error('Cart insert error:', error);
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
+  }
+  
   return NextResponse.json({ ok: true });
 }
 
 export async function PATCH(req: NextRequest) {
-  const ip = getClientIp(req);
-  const rl = rateLimit(`cart:${ip}`, 90, 60_000);
-  if (!rl.ok) return new NextResponse('Too Many Requests', { status: 429 });
-  const sid = await getOrCreateSessionId();
+  // Require authentication for cart operations
+  const authResult = await requireAuth(req);
+  if (authResult instanceof NextResponse) return authResult;
+  
+  const { userId } = authResult;
   const body = await req.json().catch(() => ({} as any));
-  const productId = String(body?.productId || '');
-  const op = String(body?.op || '').toLowerCase(); // 'inc' | 'dec' | ''
-  const qtyRaw = body?.quantity;
+  const productId = String(body.productId || '');
   if (!productId) return NextResponse.json({ error: 'Missing productId' }, { status: 400 });
-
   const supabase = getSupabaseServerClient();
-  const { data: row } = await supabase
-    .from('cart_items')
-    .select('quantity')
-    .eq('session_id', sid)
-    .eq('product_id', productId)
-    .maybeSingle();
-
-  let newQty: number | null = null;
-  if (op === 'inc') {
+  if (body.op === 'inc' || body.op === 'dec') {
+    const { data: row } = await supabase.from('cart_items').select('quantity').match({ customer_id: userId, product_id: productId }).single();
     const current = Number(row?.quantity ?? 0);
-    newQty = current + 1;
-  } else if (op === 'dec') {
-    const current = Number(row?.quantity ?? 0);
-    newQty = current - 1;
-  } else if (qtyRaw !== undefined) {
-    const parsed = Math.max(0, parseInt(String(qtyRaw), 10));
-    newQty = Number.isFinite(parsed) ? parsed : null;
-  }
-
-  if (newQty === null) {
-    return NextResponse.json({ error: 'Invalid operation' }, { status: 400 });
-  }
-
-  if (newQty <= 0) {
-    const { error } = await supabase.from('cart_items').delete().match({ session_id: sid, product_id: productId });
+    let next = body.op === 'inc' ? current + 1 : Math.max(1, current - 1);
+    const { error } = await supabase.from('cart_items').update({ quantity: next }).match({ customer_id: userId, product_id: productId });
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
-    return NextResponse.json({ ok: true, quantity: 0 });
+    return NextResponse.json({ ok: true });
   }
+  if (typeof body.quantity === 'number') {
+    const qty = Math.max(1, Math.floor(body.quantity));
+    const { error } = await supabase.from('cart_items').update({ quantity: qty }).match({ customer_id: userId, product_id: productId });
+    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    return NextResponse.json({ ok: true });
+  }
+  return NextResponse.json({ error: 'Invalid request' }, { status: 400 });
+}
 
-  const { error } = await supabase
-    .from('cart_items')
-    .upsert({ session_id: sid, product_id: productId, quantity: newQty }, { onConflict: 'session_id,product_id' });
+export async function DELETE(req: NextRequest) {
+  // Require authentication for cart operations
+  const authResult = await requireAuth(req);
+  if (authResult instanceof NextResponse) return authResult;
+  
+  const { userId } = authResult;
+  const url = new URL(req.url);
+  const productId = url.searchParams.get('productId') || '';
+  if (!productId) return NextResponse.json({ error: 'Missing productId' }, { status: 400 });
+  const supabase = getSupabaseServerClient();
+  const { error } = await supabase.from('cart_items').delete().match({ customer_id: userId, product_id: productId });
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
-  return NextResponse.json({ ok: true, quantity: newQty });
+  return NextResponse.json({ ok: true });
 }
 
 

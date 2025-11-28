@@ -5,6 +5,7 @@ export async function createOrderDraft(params: {
   currency?: string;
   totalCents: number;
   madeToOrder?: boolean;
+  shippingAddress?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
 }) {
   const supabase = getSupabaseAdminClient();
@@ -17,6 +18,7 @@ export async function createOrderDraft(params: {
       currency: params.currency ?? 'inr',
       total_cents: params.totalCents,
       made_to_order: params.madeToOrder ?? false,
+      shipping_address: params.shippingAddress ?? null,
       metadata: params.metadata ?? {}
     })
     .select('id')

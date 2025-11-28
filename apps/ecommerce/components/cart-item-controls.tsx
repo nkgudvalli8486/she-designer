@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { getAuthHeaders } from '@/src/lib/auth-client';
 
 export function CartItemControls(props: { productId: string; quantity: number }) {
   const router = useRouter();
@@ -12,7 +13,7 @@ export function CartItemControls(props: { productId: string; quantity: number })
       setLoading(true);
       const res = await fetch('/api/public/cart', {
         method: 'PATCH',
-        headers: { 'content-type': 'application/json' },
+        headers: { 'content-type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify(op === 'set' ? { productId: props.productId, quantity: qty } : { productId: props.productId, op })
       });
       if (res.ok) {
@@ -20,6 +21,8 @@ export function CartItemControls(props: { productId: string; quantity: number })
           window.dispatchEvent(new Event('cart:changed'));
         }
         router.refresh();
+      } else if (res.status === 401) {
+        router.push('/login?redirect=/cart');
       }
     } finally {
       setLoading(false);
@@ -30,13 +33,16 @@ export function CartItemControls(props: { productId: string; quantity: number })
     try {
       setLoading(true);
       const res = await fetch(`/api/public/cart?productId=${encodeURIComponent(props.productId)}`, {
-        method: 'DELETE'
+        method: 'DELETE',
+        headers: getAuthHeaders()
       });
       if (res.ok) {
         if (typeof window !== 'undefined') {
           window.dispatchEvent(new Event('cart:changed'));
         }
         router.refresh();
+      } else if (res.status === 401) {
+        router.push('/login?redirect=/cart');
       }
     } finally {
       setLoading(false);
@@ -47,16 +53,16 @@ export function CartItemControls(props: { productId: string; quantity: number })
     <div className="flex items-center gap-2">
       <div className="inline-flex items-center rounded-md border border-neutral-700">
         <button
-          className="h-8 w-8 disabled:opacity-50"
+          className="h-8 w-8 disabled:opacity-50 text-sm sm:text-base"
           disabled={loading}
           onClick={() => update('dec')}
           aria-label="Decrease quantity"
         >
           −
         </button>
-        <div className="px-3 text-sm select-none">{props.quantity}</div>
+        <div className="px-2 sm:px-3 text-xs sm:text-sm select-none min-w-[2rem] text-center">{props.quantity}</div>
         <button
-          className="h-8 w-8 disabled:opacity-50"
+          className="h-8 w-8 disabled:opacity-50 text-sm sm:text-base"
           disabled={loading}
           onClick={() => update('inc')}
           aria-label="Increase quantity"
@@ -65,7 +71,7 @@ export function CartItemControls(props: { productId: string; quantity: number })
         </button>
       </div>
       <button
-        className="h-8 px-3 rounded-md border border-neutral-700 bg-neutral-900 hover:bg-neutral-800 disabled:opacity-50"
+        className="h-8 px-2 sm:px-3 rounded-md border border-neutral-700 bg-neutral-900 hover:bg-neutral-800 disabled:opacity-50 text-xs sm:text-sm whitespace-nowrap"
         disabled={loading}
         onClick={remove}
       >

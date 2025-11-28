@@ -49,7 +49,7 @@ export function HeroCarousel({ images, intervalMs = 5000, fit = 'cover' }: HeroC
 						<div className="relative min-w-0 flex-[0_0_100%]" key={`${img.src}-${i}`}>
 							<div className="relative w-full aspect-[16/7] sm:aspect-[16/6] lg:aspect-[16/5] bg-muted">
 								{img.href ? (
-									<Link href={img.href} aria-label={img.alt ?? 'Banner'}>
+									<Link href={img.href as any} aria-label={img.alt ?? 'Banner'}>
 										<img
 											src={img.src}
 											alt={img.alt ?? 'Banner'}
@@ -76,18 +76,18 @@ export function HeroCarousel({ images, intervalMs = 5000, fit = 'cover' }: HeroC
 			<button
 				type="button"
 				onClick={scrollPrev}
-				className="absolute left-2 top-1/2 -translate-y-1/2 z-10 rounded-full border bg-black/30 text-white p-2 backdrop-blur hover:bg-black/50"
+				className="absolute left-1 sm:left-2 top-1/2 -translate-y-1/2 z-10 rounded-full border bg-black/30 text-white p-1.5 sm:p-2 backdrop-blur hover:bg-black/50"
 				aria-label="Previous slide"
 			>
-				<ChevronLeft />
+				<ChevronLeft className="w-4 h-4 sm:w-5 sm:h-5" />
 			</button>
 			<button
 				type="button"
 				onClick={scrollNext}
-				className="absolute right-2 top-1/2 -translate-y-1/2 z-10 rounded-full border bg-black/30 text-white p-2 backdrop-blur hover:bg-black/50"
+				className="absolute right-1 sm:right-2 top-1/2 -translate-y-1/2 z-10 rounded-full border bg-black/30 text-white p-1.5 sm:p-2 backdrop-blur hover:bg-black/50"
 				aria-label="Next slide"
 			>
-				<ChevronRight />
+				<ChevronRight className="w-4 h-4 sm:w-5 sm:h-5" />
 			</button>
 
 			<div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-2">
