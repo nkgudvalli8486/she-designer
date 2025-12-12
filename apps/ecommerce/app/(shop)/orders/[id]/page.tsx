@@ -1,12 +1,12 @@
-import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
-import { getAuthToken } from '@/src/lib/auth';
+import { getAuthToken, verifyAuthToken } from '@/src/lib/auth';
 import { notFound } from 'next/navigation';
 import { CancelOrderButton } from '@/components/cancel-order-button';
 import { RefundStatusChecker } from '@/components/refund-status-checker';
 import { autoSyncRefund } from './sync-refund-action';
 import { revalidatePath } from 'next/cache';
+import { getSupabaseAdminClient } from '@/src/lib/supabase-admin';
 
 async function fetchOrder(orderId: string) {
   const token = await getAuthToken();
@@ -14,20 +14,34 @@ async function fetchOrder(orderId: string) {
     redirect('/login?redirect=/orders');
   }
   
-  const hdrs = await headers();
-  const host = hdrs.get('x-forwarded-host') ?? hdrs.get('host');
-  const proto = hdrs.get('x-forwarded-proto') ?? 'http';
-  const base = host ? `${proto}://${host}` : (process.env.NEXT_PUBLIC_ECOM_BASE_URL || `http://localhost:${process.env.PORT ?? '3000'}`);
-  const res = await fetch(`${base}/api/public/orders?id=${orderId}`, {
-    cache: 'no-store',
-    headers: { Authorization: `Bearer ${token}` }
-  });
-  if (!res.ok) {
-    if (res.status === 404) return null;
+  const authPayload = await verifyAuthToken(token);
+  if (!authPayload?.userId) {
+    redirect('/login?redirect=/orders');
+  }
+  
+  // Query order directly from database
+  const supabase = getSupabaseAdminClient();
+  const { data: order, error } = await supabase
+    .from('orders')
+    .select(`
+      *,
+      order_items (
+        *,
+        products (
+          *,
+          product_images (*)
+        )
+      )
+    `)
+    .eq('id', orderId)
+    .eq('customer_id', authPayload.userId)
+    .single();
+  
+  if (error || !order) {
     return null;
   }
-  const json = await res.json();
-  return json.data;
+  
+  return order;
 }
 
 function getStatusColor(status: string) {
