@@ -1,7 +1,7 @@
-import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
-import { getAuthToken } from '@/src/lib/auth';
+import { getAuthToken, verifyAuthToken } from '@/src/lib/auth';
+import { getSupabaseAdminClient } from '@/src/lib/supabase-admin';
 import Image from 'next/image';
 
 async function fetchOrders() {
@@ -9,17 +9,59 @@ async function fetchOrders() {
   if (!token) {
     redirect('/login?redirect=/orders');
   }
+
+  const authPayload = await verifyAuthToken(token);
+  if (!authPayload?.userId) {
+    redirect('/login?redirect=/orders');
+  }
+
+  // Use admin client to bypass RLS and ensure we can fetch order_items
+  const supabase = getSupabaseAdminClient();
   
-  const hdrs = await headers();
-  const host = hdrs.get('x-forwarded-host') ?? hdrs.get('host');
-  const proto = hdrs.get('x-forwarded-proto') ?? 'http';
-  const base = host ? `${proto}://${host}` : (process.env.NEXT_PUBLIC_ECOM_BASE_URL || `http://localhost:${process.env.PORT ?? '3000'}`);
-  const res = await fetch(`${base}/api/public/orders`, {
-    cache: 'no-store',
-    headers: { Authorization: `Bearer ${token}` }
-  });
-  if (!res.ok) return { data: [] as any[] };
-  return res.json();
+  const { data: orders, error } = await supabase
+    .from('orders')
+    .select(`
+      id,
+      order_number,
+      status,
+      payment_status,
+      total_cents,
+      paid_amount_cents,
+      paid_amount,
+      refund_amount_cents,
+      refund_amount,
+      refund_id,
+      refund_reason,
+      currency,
+      created_at,
+      order_items (
+        id,
+        name,
+        quantity,
+        unit_amount_cents,
+        product_id,
+        products (
+          id,
+          name,
+          slug,
+          product_images (
+            image_url,
+            position
+          )
+        )
+      )
+    `)
+    .eq('customer_id', authPayload.userId)
+    .is('deleted_at', null)
+    .order('created_at', { ascending: false })
+    .limit(50);
+  
+  if (error) {
+    console.error('Error fetching orders:', error);
+    return [];
+  }
+  
+  return orders || [];
 }
 
 function getStatusColor(status: string) {
@@ -44,8 +86,7 @@ function getPaymentStatusColor(status: string) {
 }
 
 export default async function OrdersPage() {
-  const { data: orders } = await fetchOrders();
-  const ordersList = (orders as Array<any>) ?? [];
+  const ordersList = await fetchOrders();
 
   if (ordersList.length === 0) {
     return (
