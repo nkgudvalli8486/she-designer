@@ -51,6 +51,7 @@ async function fetchCart() {
     const p = prodMap.get(it.product_id) as any;
     const priceCents = Number(p?.sale_price_cents ?? p?.price_cents ?? 0);
     const originalCents = Number(p?.original_price_cents ?? p?.price_cents ?? priceCents);
+    const imageUrl = firstImage[it.product_id];
     return {
       productId: it.product_id,
       quantity: it.quantity,
@@ -58,7 +59,7 @@ async function fetchCart() {
       slug: p?.slug,
       price: priceCents / 100,
       originalPrice: originalCents / 100,
-      image: firstImage[it.product_id] ?? null
+      image: imageUrl ?? undefined
     };
   });
   
