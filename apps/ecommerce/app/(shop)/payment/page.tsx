@@ -1,4 +1,4 @@
-import { cookies, headers } from 'next/headers';
+import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { getSupabaseServerClient } from '@/src/lib/supabase-server';
 import { getSupabaseAdminClient } from '@/src/lib/supabase-admin';
@@ -360,25 +360,53 @@ async function fetchContext(searchParams: Promise<{ addressId?: string }>) {
     redirect('/login?redirect=/payment');
   }
   
-  const hdrs = await headers();
-  const host = hdrs.get('x-forwarded-host') ?? hdrs.get('host');
-  const proto = hdrs.get('x-forwarded-proto') ?? 'http';
-  const base = host ? `${proto}://${host}` : (process.env.NEXT_PUBLIC_ECOM_BASE_URL || `http://localhost:${process.env.PORT ?? '3000'}`);
-  const authHeaders = { Authorization: `Bearer ${token}` };
-  const [addrRes, cartRes] = await Promise.all([
-    fetch(`${base}/api/public/addresses`, { cache: 'no-store', headers: authHeaders }),
-    fetch(`${base}/api/public/cart`, { cache: 'no-store', headers: authHeaders })
-  ]);
-  const addrJson = addrRes.ok ? await addrRes.json() : { data: [] };
-  const cartJson = cartRes.ok ? await cartRes.json() : { data: [] };
-  const addresses: any[] = Array.isArray(addrJson?.data) ? addrJson.data : [];
-  const cartItems: any[] = Array.isArray(cartJson?.data) ? cartJson.data : [];
+  const authPayload = await verifyAuthToken(token);
+  if (!authPayload?.userId) {
+    redirect('/login?redirect=/payment');
+  }
+  
+  const supabase = getSupabaseServerClient();
+  
+  // Fetch addresses directly from database
+  const { data: addresses, error: addrError } = await supabase
+    .from('addresses')
+    .select('*')
+    .eq('customer_id', authPayload.userId)
+    .order('is_default', { ascending: false })
+    .order('created_at', { ascending: false });
+  
+  if (addrError) {
+    console.error('Error fetching addresses:', addrError);
+  }
+  
+  // Fetch cart directly from database
+  const { data: items, error: cartError } = await supabase
+    .from('cart_items')
+    .select('product_id, quantity, created_at, products ( name, price_cents, sale_price_cents, original_price_cents )')
+    .eq('customer_id', authPayload.userId)
+    .order('created_at', { ascending: true });
+  
+  if (cartError) {
+    console.error('Cart fetch error:', cartError);
+  }
+  
+  const addressesList: any[] = (addresses ?? []) || [];
+  const cartItems = (items ?? []).map((it: any) => {
+    const priceCents = Number(it.products?.sale_price_cents ?? it.products?.price_cents ?? 0);
+    const originalCents = Number(it.products?.original_price_cents ?? it.products?.price_cents ?? priceCents);
+    return {
+      price: priceCents / 100,
+      originalPrice: originalCents / 100,
+      quantity: it.quantity || 1
+    };
+  });
+  
   const mrp = cartItems.reduce((s, it) => s + (Number(it.originalPrice) || Number(it.price) || 0) * (Number(it.quantity) || 0), 0);
   const total = cartItems.reduce((s, it) => s + (Number(it.price) || 0) * (Number(it.quantity) || 0), 0);
   const discount = Math.max(0, mrp - total);
   const platformFee = cartItems.length > 0 ? 23 : 0;
-  const selectedId = addressId || (addresses.find((a) => a.is_default)?.id ?? addresses[0]?.id ?? '');
-  return { addresses, cartItems, mrp, total, discount, platformFee, selectedId };
+  const selectedId = addressId || (addressesList.find((a) => a.is_default)?.id ?? addressesList[0]?.id ?? '');
+  return { addresses: addressesList, cartItems, mrp, total, discount, platformFee, selectedId };
 }
 
 export default async function PaymentPage(props: { searchParams: Promise<{ addressId?: string }> }) {
