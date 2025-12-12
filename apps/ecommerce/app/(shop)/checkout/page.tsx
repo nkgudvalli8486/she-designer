@@ -373,33 +373,61 @@ async function fetchAddresses(): Promise<SavedAddress[]> {
   const token = await getAuthToken();
   if (!token) return [];
   
-  const hdrs = await headers();
-  const host = hdrs.get('x-forwarded-host') ?? hdrs.get('host');
-  const proto = hdrs.get('x-forwarded-proto') ?? 'http';
-  const base = host ? `${proto}://${host}` : (process.env.NEXT_PUBLIC_ECOM_BASE_URL || `http://localhost:${process.env.PORT ?? '3000'}`);
-  const res = await fetch(`${base}/api/public/addresses`, {
-    cache: 'no-store',
-    headers: { Authorization: `Bearer ${token}` }
+  const authPayload = await verifyAuthToken(token);
+  if (!authPayload?.userId) return [];
+  
+  const supabase = getSupabaseServerClient();
+  const { data: addresses, error } = await supabase
+    .from('addresses')
+    .select('*')
+    .eq('customer_id', authPayload.userId)
+    .order('is_default', { ascending: false })
+    .order('created_at', { ascending: false });
+  
+  if (error) {
+    console.error('Error fetching addresses:', error);
+    return [];
+  }
+  
+  return (addresses as SavedAddress[]) ?? [];
+}
+
+async function fetchCartForCheckout() {
+  const token = await getAuthToken();
+  if (!token) return [];
+  
+  const authPayload = await verifyAuthToken(token);
+  if (!authPayload?.userId) return [];
+  
+  const supabase = getSupabaseServerClient();
+  const { data: items, error } = await supabase
+    .from('cart_items')
+    .select('product_id, quantity, created_at, products ( name, price_cents, sale_price_cents, original_price_cents )')
+    .eq('customer_id', authPayload.userId)
+    .order('created_at', { ascending: true });
+  
+  if (error) {
+    console.error('Cart fetch error:', error);
+    return [];
+  }
+  
+  if (!items?.length) return [];
+  
+  return items.map((it: any) => {
+    const priceCents = Number(it.products?.sale_price_cents ?? it.products?.price_cents ?? 0);
+    const originalCents = Number(it.products?.original_price_cents ?? it.products?.price_cents ?? priceCents);
+    return {
+      price: priceCents / 100,
+      originalPrice: originalCents / 100,
+      quantity: it.quantity || 1
+    };
   });
-  if (!res.ok) return [];
-  const { data } = await res.json();
-  return (data as SavedAddress[]) ?? [];
 }
 
 export default async function CheckoutPage() {
   const addresses = await fetchAddresses();
-  // Load cart again to compute price details
-  const token = await getAuthToken();
-  const hdrs = await headers();
-  const host = hdrs.get('x-forwarded-host') ?? hdrs.get('host');
-  const proto = hdrs.get('x-forwarded-proto') ?? 'http';
-  const base = host ? `${proto}://${host}` : (process.env.NEXT_PUBLIC_ECOM_BASE_URL || `http://localhost:${process.env.PORT ?? '3000'}`);
-  const res = await fetch(`${base}/api/public/cart`, {
-    cache: 'no-store',
-    headers: token ? { Authorization: `Bearer ${token}` } : {}
-  });
-  const json = res.ok ? await res.json() : { data: [] };
-  const cartItems: Array<{ price?: number; originalPrice?: number; quantity?: number }> = Array.isArray(json?.data) ? json.data : [];
+  // Load cart directly from database to compute price details
+  const cartItems = await fetchCartForCheckout();
   const mrp = cartItems.reduce((s, it) => s + (Number(it.originalPrice) || Number(it.price) || 0) * (Number(it.quantity) || 0), 0);
   const total = cartItems.reduce((s, it) => s + (Number(it.price) || 0) * (Number(it.quantity) || 0), 0);
   const discount = Math.max(0, mrp - total);
