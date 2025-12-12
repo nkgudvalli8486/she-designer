@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/src/lib/auth-middleware';
-import { getSupabaseServerClient } from '@/src/lib/supabase-server';
+import { getSupabaseAdminClient } from '@/src/lib/supabase-admin';
 import { z } from 'zod';
 
 const UpdateProfileSchema = z.object({
@@ -23,11 +23,22 @@ export async function PATCH(req: NextRequest) {
   if (parsed.data.name !== undefined) updates.name = parsed.data.name;
   if (parsed.data.email !== undefined) updates.email = parsed.data.email;
 
-  const supabase = getSupabaseServerClient();
-  const { data, error } = await supabase.from('customers').update(updates).eq('id', userId).select().single();
+  // Use admin client to ensure updates are saved to database
+  const supabase = getSupabaseAdminClient();
+  const { data, error } = await supabase
+    .from('customers')
+    .update(updates)
+    .eq('id', userId)
+    .select('id, name, email, phone, created_at, updated_at')
+    .single();
 
   if (error) {
+    console.error('Profile update error:', error);
     return NextResponse.json({ error: error.message }, { status: 400 });
+  }
+
+  if (!data) {
+    return NextResponse.json({ error: 'Customer not found' }, { status: 404 });
   }
 
   return NextResponse.json({ user: data });

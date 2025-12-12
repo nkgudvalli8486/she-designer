@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useToast } from '@/components/toast';
 
 export function LoginForm() {
   const [step, setStep] = useState<'phone' | 'otp'>('phone');
@@ -11,10 +12,13 @@ export function LoginForm() {
   const [error, setError] = useState('');
   const [devOtp, setDevOtp] = useState<string | null>(null);
   const router = useRouter();
+  const { success, error: showError } = useToast();
 
   const handleSendOTP = async () => {
     if (!/^[0-9]{10}$/.test(phone)) {
-      setError('Please enter a valid 10-digit phone number');
+      const errorMsg = 'Please enter a valid 10-digit phone number';
+      setError(errorMsg);
+      showError(errorMsg);
       return;
     }
     setLoading(true);
@@ -33,9 +37,12 @@ export function LoginForm() {
       if (data.devOtp) {
         setDevOtp(data.devOtp);
       }
+      success('OTP sent successfully!');
       setStep('otp');
     } catch (err) {
-      setError((err as Error).message);
+      const errorMsg = (err as Error).message;
+      setError(errorMsg);
+      showError(errorMsg);
     } finally {
       setLoading(false);
     }
@@ -43,7 +50,9 @@ export function LoginForm() {
 
   const handleVerifyOTP = async () => {
     if (!/^[0-9]{6}$/.test(otp)) {
-      setError('Please enter a valid 6-digit OTP');
+      const errorMsg = 'Please enter a valid 6-digit OTP';
+      setError(errorMsg);
+      showError(errorMsg);
       return;
     }
     setLoading(true);
@@ -59,16 +68,21 @@ export function LoginForm() {
         throw new Error(data.error || 'Invalid OTP');
       }
       // Success - trigger auth change event and redirect
+      success('Login successful!');
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new Event('auth:changed'));
         // Force a full page reload to ensure cookies are available
-        window.location.href = '/';
+        setTimeout(() => {
+          window.location.href = '/';
+        }, 500);
       } else {
         router.push('/');
         router.refresh();
       }
     } catch (err) {
-      setError((err as Error).message);
+      const errorMsg = (err as Error).message;
+      setError(errorMsg);
+      showError(errorMsg);
     } finally {
       setLoading(false);
     }

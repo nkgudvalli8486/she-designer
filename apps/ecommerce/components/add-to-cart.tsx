@@ -3,11 +3,13 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { getAuthHeaders } from '@/src/lib/auth-client';
+import { useToast } from '@/components/toast';
 
 export function AddToCart(props: { productId: string; disabled?: boolean }) {
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState(false);
   const router = useRouter();
+  const { success, error } = useToast();
 
   // Detect if this product is already in the cart
   useEffect(() => {
@@ -54,6 +56,7 @@ export function AddToCart(props: { productId: string; disabled?: boolean }) {
           });
           if (res.ok) {
             setDone(true);
+            success('Item added to cart successfully!');
             if (typeof window !== 'undefined') {
               window.dispatchEvent(new Event('cart:changed'));
             }
@@ -61,6 +64,8 @@ export function AddToCart(props: { productId: string; disabled?: boolean }) {
             // Redirect to login if not authenticated
             const currentPath = window.location.pathname;
             router.push(`/login?redirect=${encodeURIComponent(currentPath)}`);
+          } else {
+            error('Failed to add item to cart. Please try again.');
           }
         } finally {
           setSubmitting(false);

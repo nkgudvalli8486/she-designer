@@ -4,6 +4,7 @@ import { Navbar } from '@/components/navbar';
 import { Topbar } from '@/components/topbar';
 import { Footer } from '@/components/footer';
 import { CurrencyProvider } from '@/components/currency-context';
+import { ToastProvider, ToastContainer } from '@/components/toast';
 
 export const metadata: Metadata = {
   title: 'She Designer – Shop',
@@ -14,12 +15,15 @@ export default function RootLayout(props: { children: React.ReactNode }) {
   return (
     <html lang="en">
       <body className="min-h-screen bg-gradient-to-b from-black via-neutral-900 to-black text-white">
-        <CurrencyProvider>
-          <Topbar />
-          <Navbar />
-          {props.children}
-          <Footer />
-        </CurrencyProvider>
+        <ToastProvider>
+          <CurrencyProvider>
+            <Topbar />
+            <Navbar />
+            {props.children}
+            <Footer />
+            <ToastContainer />
+          </CurrencyProvider>
+        </ToastProvider>
       </body>
     </html>
   );

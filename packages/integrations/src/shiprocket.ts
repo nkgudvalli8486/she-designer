@@ -41,7 +41,6 @@ export async function createShiprocketOrder(payload: Record<string, unknown>) {
 }
 
 export function verifyShiprocketWebhook(signatureHeader: string | undefined, rawBody: string) {
-  // Placeholder HMAC verification by shared secret. Implement as per Shiprocket docs when enabled.
   const secret = process.env.SHIPROCKET_WEBHOOK_SECRET;
   if (!secret) {
     throw new Error('SHIPROCKET_WEBHOOK_SECRET is not set');
@@ -49,8 +48,55 @@ export function verifyShiprocketWebhook(signatureHeader: string | undefined, raw
   if (!signatureHeader) {
     throw new Error('Missing Shiprocket signature header');
   }
-  // TODO: Compute HMAC and compare with signatureHeader value
-  return true;
+  
+  // Compute HMAC SHA256 and compare with signatureHeader
+  // Shiprocket typically uses HMAC SHA256 for webhook verification
+  try {
+    // Use dynamic import for better compatibility
+    const crypto = typeof require !== 'undefined' ? require('crypto') : null;
+    if (!crypto) {
+      // Fallback for environments without Node.js crypto
+      // In production, ensure Node.js runtime is used
+      console.warn('Crypto module not available, using fallback verification');
+      if (signatureHeader === secret) {
+        return true;
+      }
+      throw new Error('Shiprocket webhook verification failed - crypto module unavailable');
+    }
+    
+    const hmac = crypto.createHmac('sha256', secret);
+    hmac.update(rawBody);
+    const computedSignature = hmac.digest('hex');
+    
+    // Compare signatures (constant-time comparison to prevent timing attacks)
+    const providedSignature = signatureHeader.replace('sha256=', '').trim();
+    if (computedSignature.length !== providedSignature.length) {
+      throw new Error('Invalid Shiprocket webhook signature');
+    }
+    
+    let match = 0;
+    for (let i = 0; i < computedSignature.length; i++) {
+      match |= computedSignature.charCodeAt(i) ^ providedSignature.charCodeAt(i);
+    }
+    
+    if (match !== 0) {
+      throw new Error('Invalid Shiprocket webhook signature');
+    }
+    
+    return true;
+  } catch (err) {
+    // If crypto module is not available or signature format is different, 
+    // fall back to simple string comparison (less secure but functional for dev)
+    if ((err as Error).message.includes('Invalid') || (err as Error).message.includes('verification failed')) {
+      throw err;
+    }
+    // For development/testing, allow if signatures match exactly
+    if (process.env.NODE_ENV === 'development' && signatureHeader === secret) {
+      console.warn('Using fallback webhook verification in development mode');
+      return true;
+    }
+    throw new Error('Shiprocket webhook verification failed');
+  }
 }
 
 

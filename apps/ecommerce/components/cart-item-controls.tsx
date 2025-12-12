@@ -3,10 +3,12 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { getAuthHeaders } from '@/src/lib/auth-client';
+import { useToast } from '@/components/toast';
 
 export function CartItemControls(props: { productId: string; quantity: number }) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
+  const { success, error } = useToast();
 
   async function update(op: 'inc' | 'dec' | 'set', qty?: number) {
     try {
@@ -17,12 +19,15 @@ export function CartItemControls(props: { productId: string; quantity: number })
         body: JSON.stringify(op === 'set' ? { productId: props.productId, quantity: qty } : { productId: props.productId, op })
       });
       if (res.ok) {
+        success('Cart updated successfully');
         if (typeof window !== 'undefined') {
           window.dispatchEvent(new Event('cart:changed'));
         }
         router.refresh();
       } else if (res.status === 401) {
         router.push('/login?redirect=/cart');
+      } else {
+        error('Failed to update cart. Please try again.');
       }
     } finally {
       setLoading(false);
@@ -37,12 +42,15 @@ export function CartItemControls(props: { productId: string; quantity: number })
         headers: getAuthHeaders()
       });
       if (res.ok) {
+        success('Item removed from cart');
         if (typeof window !== 'undefined') {
           window.dispatchEvent(new Event('cart:changed'));
         }
         router.refresh();
       } else if (res.status === 401) {
         router.push('/login?redirect=/cart');
+      } else {
+        error('Failed to remove item. Please try again.');
       }
     } finally {
       setLoading(false);

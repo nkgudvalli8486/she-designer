@@ -79,16 +79,51 @@ async function startCheckout(formData: FormData) {
   };
   }
 
+  // Prepare order items from cart
+  const orderItems = (cart ?? [])
+    .map((row: any) => {
+      const priceCents = Number(row?.products?.sale_price_cents ?? row?.products?.price_cents ?? 0);
+      if (priceCents > 0 && row.product_id) {
+        return {
+          product_id: row.product_id,
+          name: row.products?.name || 'Unknown Product',
+          unit_amount_cents: priceCents,
+          quantity: Number(row.quantity) || 1,
+          attributes: {}
+        };
+      }
+      return null;
+    })
+    .filter((item): item is NonNullable<typeof item> => item !== null);
+
   const orderId = await createOrderDraft({
     customerId: authPayload.userId,
     totalCents: total,
     shippingAddress,
-    metadata: { source: 'ecommerce' }
+    items: orderItems,
+    metadata: { source: 'ecommerce', payment_method: 'CARD' }
   });
+  
+  // Fetch customer data for Stripe (required for Indian exports)
+  const { data: customer } = await supabase
+    .from('customers')
+    .select('name, email, phone')
+    .eq('id', authPayload.userId)
+    .single();
+  
+  // Get base URL for Stripe redirects
+  const hdrs = await headers();
+  const host = hdrs.get('x-forwarded-host') ?? hdrs.get('host');
+  const proto = hdrs.get('x-forwarded-proto') ?? 'http';
+  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || (host ? `${proto}://${host}` : `http://localhost:${process.env.PORT ?? '3000'}`);
+
   const session = await createCheckoutSession({
     items,
-    successUrl: `${process.env.NEXT_PUBLIC_SITE_URL}/checkout/success`,
-    cancelUrl: `${process.env.NEXT_PUBLIC_SITE_URL}/cart`,
+    successUrl: `${baseUrl}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
+    cancelUrl: `${baseUrl}/cart`,
+    customerEmail: customer?.email || shippingAddress.email || undefined,
+    customerName: customer?.name || shippingAddress.name || undefined,
+    shippingAddress: shippingAddress,
     metadata: { orderId }
   });
   if (session.url) {

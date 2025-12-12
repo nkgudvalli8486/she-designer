@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { getAuthHeaders } from '@/src/lib/auth-client';
+import { useToast } from '@/components/toast';
 
 interface ProfileEditFormProps {
   initialData: {
@@ -16,17 +17,16 @@ export function ProfileEditForm({ initialData }: ProfileEditFormProps) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState(false);
   const [formData, setFormData] = useState({
     name: initialData.name || '',
     email: initialData.email || ''
   });
+  const { success, error: showError } = useToast();
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
     setError(null);
-    setSuccess(false);
 
     try {
       const res = await fetch('/api/auth/profile', {
@@ -41,11 +41,13 @@ export function ProfileEditForm({ initialData }: ProfileEditFormProps) {
       const json = await res.json();
 
       if (!res.ok) {
-        setError(json.error || 'Failed to update profile');
+        const errorMsg = json.error || 'Failed to update profile';
+        setError(errorMsg);
+        showError(errorMsg);
         return;
       }
 
-      setSuccess(true);
+      success('Profile updated successfully!');
       // Trigger auth change event to update user profile in topbar
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new Event('auth:changed'));
@@ -55,7 +57,9 @@ export function ProfileEditForm({ initialData }: ProfileEditFormProps) {
         router.refresh();
       }, 1000);
     } catch (err) {
-      setError('An error occurred. Please try again.');
+      const errorMsg = 'An error occurred. Please try again.';
+      setError(errorMsg);
+      showError(errorMsg);
     } finally {
       setLoading(false);
     }
@@ -66,11 +70,6 @@ export function ProfileEditForm({ initialData }: ProfileEditFormProps) {
       {error && (
         <div className="rounded-md bg-red-900/50 border border-red-800 p-3 text-sm text-red-200">
           {error}
-        </div>
-      )}
-      {success && (
-        <div className="rounded-md bg-green-900/50 border border-green-800 p-3 text-sm text-green-200">
-          Profile updated successfully!
         </div>
       )}
 

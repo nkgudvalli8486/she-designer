@@ -2,8 +2,24 @@ import { StatCard } from '@/components/stat-card';
 import { Package, ShoppingCart, Users, IndianRupee } from 'lucide-react';
 import { RecentOrders } from '@/components/recent-orders';
 import Link from 'next/link';
+import { getSupabaseServerClient } from '@/src/lib/supabase-server';
 
-export default function AdminDashboardPage() {
+export default async function AdminDashboardPage() {
+	const supabase = getSupabaseServerClient();
+	
+	// Fetch real stats
+	const [productsResult, ordersResult, customersResult, revenueResult] = await Promise.all([
+		supabase.from('products').select('id', { count: 'exact', head: true }).eq('deleted_at', null),
+		supabase.from('orders').select('id', { count: 'exact', head: true }),
+		supabase.from('customers').select('id', { count: 'exact', head: true }),
+		supabase.from('orders').select('total_cents').eq('payment_status', 'paid')
+	]);
+
+	const totalProducts = productsResult.count || 0;
+	const totalOrders = ordersResult.count || 0;
+	const totalCustomers = customersResult.count || 0;
+	const revenue = (revenueResult.data || []).reduce((sum, o) => sum + (o.total_cents || 0), 0);
+
 	return (
 		<div className="space-y-6">
 			<div className="rounded-2xl bg-gradient-to-r from-pink-600 to-rose-500 text-white p-6">
@@ -14,10 +30,10 @@ export default function AdminDashboardPage() {
 			</div>
 
 			<div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-				<StatCard icon={<Package className="text-pink-600" />} label="Total Products" value="156" delta="12%" />
-				<StatCard icon={<ShoppingCart className="text-emerald-600" />} label="Total Orders" value="2,847" delta="23%" />
-				<StatCard icon={<Users className="text-violet-600" />} label="Total Customers" value="1,234" delta="8%" />
-				<StatCard icon={<IndianRupee className="text-rose-600" />} label="Revenue" value="₹4,56,789" delta="15%" />
+				<StatCard icon={<Package className="text-pink-600" />} label="Total Products" value={totalProducts.toLocaleString()} />
+				<StatCard icon={<ShoppingCart className="text-emerald-600" />} label="Total Orders" value={totalOrders.toLocaleString()} />
+				<StatCard icon={<Users className="text-violet-600" />} label="Total Customers" value={totalCustomers.toLocaleString()} />
+				<StatCard icon={<IndianRupee className="text-rose-600" />} label="Revenue" value={`₹${(revenue / 100).toLocaleString()}`} />
 			</div>
 
 			<div className="grid gap-6 lg:grid-cols-3">

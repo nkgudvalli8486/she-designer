@@ -290,11 +290,34 @@ create table if not exists public.orders (
   total_cents int not null default 0,
   currency text not null default 'inr',
   shipping_address jsonb,
-  made_to_order boolean default false,
   metadata jsonb,
   created_at timestamptz default now(),
   updated_at timestamptz default now()
 );
+
+-- Ensure made_to_order column exists (added separately for compatibility)
+alter table public.orders add column if not exists made_to_order boolean default false;
+
+-- Add soft delete support for orders
+alter table public.orders add column if not exists deleted_at timestamptz;
+
+-- Ensure metadata column exists (for storing order metadata)
+alter table public.orders add column if not exists metadata jsonb default '{}'::jsonb;
+
+-- Add paid_amount_cents column to track actual amount paid
+alter table public.orders add column if not exists paid_amount_cents int default 0;
+
+-- Add paid_amount column (numeric/decimal version of paid_amount_cents)
+alter table public.orders add column if not exists paid_amount numeric default 0;
+
+-- Add payment tracking columns for refunds
+alter table public.orders add column if not exists stripe_payment_intent_id text;
+alter table public.orders add column if not exists stripe_charge_id text;
+alter table public.orders add column if not exists stripe_session_id text;
+alter table public.orders add column if not exists refund_amount_cents int default 0;
+alter table public.orders add column if not exists refund_amount numeric default 0;
+alter table public.orders add column if not exists refund_id text;
+alter table public.orders add column if not exists refund_reason text;
 
 create table if not exists public.order_items (
   id uuid primary key default gen_random_uuid(),
@@ -302,9 +325,31 @@ create table if not exists public.order_items (
   product_id uuid references public.products(id) on delete set null,
   name text not null,
   unit_amount_cents int not null,
-  quantity int not null default 1,
-  attributes jsonb default '{}'::jsonb
+  quantity int not null default 1
 );
+
+-- Ensure attributes column exists (for storing variant/option data)
+alter table public.order_items add column if not exists attributes jsonb default '{}'::jsonb;
+
+-- Add unit_price column (numeric/decimal version of unit_amount_cents)
+alter table public.order_items add column if not exists unit_price numeric default 0;
+
+-- Add total_price column (unit_price * quantity)
+alter table public.order_items add column if not exists total_price numeric default 0;
+
+-- Add title column (often an alias for name)
+alter table public.order_items add column if not exists title text;
+
+-- Indexes for order_items for better query performance
+create index if not exists idx_order_items_order_id on public.order_items(order_id);
+create index if not exists idx_order_items_product_id on public.order_items(product_id);
+
+-- Indexes for orders table
+create index if not exists idx_orders_customer_id on public.orders(customer_id);
+create index if not exists idx_orders_status on public.orders(status);
+create index if not exists idx_orders_payment_status on public.orders(payment_status);
+create index if not exists idx_orders_created_at on public.orders(created_at);
+create index if not exists idx_orders_deleted_at on public.orders(deleted_at) where deleted_at is null;
 
 create table if not exists public.promotions (
   id uuid primary key default gen_random_uuid(),

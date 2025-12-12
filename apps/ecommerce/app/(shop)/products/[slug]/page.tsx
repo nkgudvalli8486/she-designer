@@ -2,13 +2,14 @@ import { getProductBySlug } from '@/src/lib/products';
 import { AddToCart } from '@/components/add-to-cart';
 import { WishlistButton } from '@/components/wishlist-button';
 import { ProductPrice } from '@/components/product-price';
+import { notFound } from 'next/navigation';
 
 export default async function ProductPage(props: { params: Promise<{ slug: string }> }) {
   const { slug } = await props.params;
   const product: any = await getProductBySlug(slug);
 
   if (!product) {
-    return <div className="container py-10">Product not found.</div>;
+    notFound();
   }
   const images: string[] = (product.product_images || []).map((x: any) => x.url as string);
   const priceCents = product.sale_price_cents ?? product.price_cents ?? 0;

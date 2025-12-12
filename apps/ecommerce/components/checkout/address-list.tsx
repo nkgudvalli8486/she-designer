@@ -2,6 +2,7 @@
 
 import * as React from 'react';
 import { useRouter } from 'next/navigation';
+import { useToast } from '@/components/toast';
 
 export type SavedAddress = {
   id: string;
@@ -35,23 +36,45 @@ export function AddressList(props: {
     return def?.id ?? props.addresses[0]?.id ?? null;
   });
   const router = useRouter();
+  const { success, error } = useToast();
 
   React.useEffect(() => {
     props.onSelect?.(selected ?? '');
   }, [selected]);
 
   async function setDefault(id: string) {
-    await fetch(`/api/public/addresses/${id}`, {
-      method: 'PUT',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ is_default: true })
-    });
-    router.refresh();
+    try {
+      const res = await fetch(`/api/public/addresses/${id}`, {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ is_default: true })
+      });
+      if (res.ok) {
+        success('Default address updated');
+        router.refresh();
+      } else {
+        error('Failed to update default address');
+      }
+    } catch {
+      error('Failed to update default address');
+    }
   }
 
   async function remove(id: string) {
-    await fetch(`/api/public/addresses/${id}`, { method: 'DELETE' });
-    router.refresh();
+    if (!confirm('Are you sure you want to remove this address?')) {
+      return;
+    }
+    try {
+      const res = await fetch(`/api/public/addresses/${id}`, { method: 'DELETE' });
+      if (res.ok) {
+        success('Address removed successfully');
+        router.refresh();
+      } else {
+        error('Failed to remove address');
+      }
+    } catch {
+      error('Failed to remove address');
+    }
   }
 
   return (

@@ -2,10 +2,12 @@
 
 import { useEffect, useState } from 'react';
 import { getAuthHeaders, getAuthTokenClient } from '@/src/lib/auth-client';
+import { useToast } from '@/components/toast';
 
 export function WishlistButton(props: { productId: string }) {
   const [saving, setSaving] = useState(false);
   const [added, setAdded] = useState(false);
+  const { success, error } = useToast();
 
   // On mount, detect if this product is already in the wishlist for the current session
   useEffect(() => {
@@ -73,12 +75,15 @@ export function WishlistButton(props: { productId: string }) {
           });
           if (res.ok) {
             setAdded(true);
+            success('Added to wishlist!');
             if (typeof window !== 'undefined') {
               window.dispatchEvent(new Event('wishlist:changed'));
             }
           } else if (res.status === 401) {
             // Not authenticated - redirect to login
             window.location.href = '/login?redirect=' + encodeURIComponent(window.location.pathname);
+          } else {
+            error('Failed to add to wishlist. Please try again.');
           }
         } finally {
           setSaving(false);

@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { User, LogOut } from 'lucide-react';
+import { User, LogOut, Package } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { getAuthTokenClient } from '@/src/lib/auth-client';
@@ -170,6 +170,14 @@ export function UserProfile() {
                 className="flex items-center gap-2 px-3 py-2 text-sm text-neutral-200 hover:bg-neutral-800 rounded"
               >
                 Edit Profile
+              </Link>
+              <Link
+                href="/orders"
+                onClick={() => setShowMenu(false)}
+                className="flex items-center gap-2 px-3 py-2 text-sm text-neutral-200 hover:bg-neutral-800 rounded"
+              >
+                <Package size={14} />
+                My Orders
               </Link>
               <button
                 onClick={handleLogout}

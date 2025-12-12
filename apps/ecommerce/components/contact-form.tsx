@@ -1,10 +1,12 @@
 'use client';
 
 import * as React from 'react';
+import { useToast } from '@/components/toast';
 
 export function ContactForm() {
   const [submitting, setSubmitting] = React.useState(false);
   const [result, setResult] = React.useState<string | null>(null);
+  const { success, error } = useToast();
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const form = e.currentTarget;
@@ -26,13 +28,18 @@ export function ContactForm() {
       });
       if (res.ok) {
         form.reset();
-        setResult('Thanks! Your message has been sent.');
+        setResult(null);
+        success('Thanks! Your message has been sent.');
       } else {
         const j = await res.json().catch(() => ({}));
-        setResult(j?.error || 'Something went wrong. Please try again.');
+        const errorMsg = j?.error || 'Something went wrong. Please try again.';
+        setResult(errorMsg);
+        error(errorMsg);
       }
     } catch (err) {
-      setResult((err as Error).message);
+      const errorMsg = (err as Error).message;
+      setResult(errorMsg);
+      error(errorMsg);
     } finally {
       setSubmitting(false);
     }
