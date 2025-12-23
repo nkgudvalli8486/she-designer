@@ -164,6 +164,7 @@ create table if not exists public.cart_items (
   customer_id uuid references public.customers(id) on delete cascade,
   product_id uuid references public.products(id) on delete cascade,
   quantity int not null default 1 check (quantity > 0),
+  attributes jsonb default '{}'::jsonb,
   created_at timestamptz default now(),
   updated_at timestamptz default now(),
   check ((session_id is not null) or (customer_id is not null))

@@ -28,8 +28,18 @@ pnpm install
 2) Setup environment (create `.env` in the repository root or in each app):
 
 - `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+- `SUPABASE_SERVICE_ROLE_KEY` (required for admin APIs + auth cookie issuance)
 - `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`
 - `SHIPROCKET_API_EMAIL`, `SHIPROCKET_API_PASSWORD`, `SHIPROCKET_WEBHOOK_SECRET`
+
+### Auth (Ecommerce)
+Ecommerce uses **Supabase Auth** for **Email/Password**, and then issues an `auth_token` cookie (internal customer id) used by the app APIs.
+
+In Supabase Dashboard:
+- **Authentication → Providers**: enable **Email** (and allow signups if you want users to register)
+- **Authentication → URL Configuration**: allow redirect URL(s) for password reset:
+  - `http://localhost:3000/reset-password`
+  - your production equivalent (e.g. `https://your-domain.com/reset-password`)
 
 3) Development:
 
