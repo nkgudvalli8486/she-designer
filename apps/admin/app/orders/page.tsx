@@ -118,7 +118,7 @@ export default async function OrdersListPage({ searchParams }: { searchParams: P
           <select
             name="status"
             defaultValue={statusFilter}
-            className="rounded-md border border-neutral-300 px-3 py-2 text-sm"
+            className="rounded-md border border-neutral-700 bg-neutral-900 text-neutral-100 px-3 py-2 text-sm"
           >
             <option value="all">All Statuses</option>
             <option value="pending">Pending</option>
@@ -131,7 +131,7 @@ export default async function OrdersListPage({ searchParams }: { searchParams: P
           <select
             name="payment"
             defaultValue={paymentFilter}
-            className="rounded-md border border-neutral-300 px-3 py-2 text-sm"
+            className="rounded-md border border-neutral-700 bg-neutral-900 text-neutral-100 px-3 py-2 text-sm"
           >
             <option value="all">All Payments</option>
             <option value="unpaid">Unpaid</option>
@@ -147,7 +147,7 @@ export default async function OrdersListPage({ searchParams }: { searchParams: P
           {(statusFilter !== 'all' || paymentFilter !== 'all') && (
             <Link
               href="/orders"
-              className="rounded-md border border-neutral-300 px-4 py-2 text-sm hover:bg-neutral-50"
+              className="rounded-md border border-neutral-700 px-4 py-2 text-sm text-neutral-100 hover:bg-neutral-800"
             >
               Clear
             </Link>

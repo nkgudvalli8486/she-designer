@@ -1,11 +1,16 @@
 type Category = { id: string; name: string; slug: string; image_url?: string | null };
 import { revalidatePath } from 'next/cache';
+import { getAdminBaseUrl } from '@/src/lib/base-url';
 
 async function getCategories(): Promise<Category[]> {
-  const base = process.env.NEXT_PUBLIC_ADMIN_BASE_URL || `http://localhost:${process.env.PORT ?? '3001'}`;
-  const res = await fetch(`${base}/api/categories`, { cache: 'no-store' });
-  const json = await res.json().catch(() => ({ data: [] }));
-  return json.data ?? [];
+  const base = getAdminBaseUrl();
+  try {
+    const res = await fetch(`${base}/api/categories`, { cache: 'no-store' });
+    const json = await res.json().catch(() => ({ data: [] }));
+    return json.data ?? [];
+  } catch {
+    return [];
+  }
 }
 
 async function createCategoryAction(formData: FormData) {
@@ -13,7 +18,7 @@ async function createCategoryAction(formData: FormData) {
   const name = String(formData.get('name') || '').trim();
   const slug = String(formData.get('slug') || '').trim().toLowerCase();
   const imageUrl = String(formData.get('imageUrl') || '').trim() || undefined;
-  const base = process.env.NEXT_PUBLIC_ADMIN_BASE_URL || `http://localhost:${process.env.PORT ?? '3001'}`;
+  const base = getAdminBaseUrl();
   const res = await fetch(`${base}/api/categories`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -30,7 +35,7 @@ async function updateCategoryAction(formData: FormData) {
   const slug = String(formData.get('slug') || '').trim().toLowerCase();
   const imageUrl = String(formData.get('imageUrl') || '').trim();
   if (!id) throw new Error('Missing category id');
-  const base = process.env.NEXT_PUBLIC_ADMIN_BASE_URL || `http://localhost:${process.env.PORT ?? '3001'}`;
+  const base = getAdminBaseUrl();
   const payload: any = {};
   if (name) payload.name = name;
   if (slug) payload.slug = slug;
@@ -48,7 +53,7 @@ async function deleteCategoryAction(formData: FormData) {
   'use server';
   const id = String(formData.get('id') || '').trim();
   if (!id) throw new Error('Missing category id');
-  const base = process.env.NEXT_PUBLIC_ADMIN_BASE_URL || `http://localhost:${process.env.PORT ?? '3001'}`;
+  const base = getAdminBaseUrl();
   const res = await fetch(`${base}/api/categories/${id}?hard=1`, { method: 'DELETE' });
   if (!res.ok) throw new Error(await res.text());
   revalidatePath('/categories');

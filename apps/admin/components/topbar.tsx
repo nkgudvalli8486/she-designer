@@ -2,12 +2,13 @@
 
 import Link from 'next/link';
 import { Globe, Plus, Bell } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { usePathname } from 'next/navigation';
 
 export function Topbar() {
 	const [notificationCount, setNotificationCount] = useState(0);
 	const pathname = usePathname();
+	const hasWarnedRef = useRef(false);
 	
 	useEffect(() => {
 		// Clear count when on notifications page
@@ -19,8 +20,11 @@ export function Topbar() {
 		// Fetch notification count
 		const fetchNotifications = async () => {
 			try {
-				const res = await fetch('/api/notifications?unread=true');
-				const data = await res.json();
+				const res = await fetch('/api/notifications?unread=true', { cache: 'no-store' });
+				if (!res.ok) return;
+
+				const data = await res.json().catch(() => null);
+				if (!data || data.disabled) return;
 				if (data.notifications) {
 					// Filter out viewed notifications
 					const viewedStr = localStorage.getItem('viewedNotifications');
@@ -29,7 +33,13 @@ export function Topbar() {
 					setNotificationCount(unread.length);
 				}
 			} catch (error) {
-				console.error('Error fetching notifications:', error);
+				// Avoid spamming console every 30s if backend/env isn't configured in dev.
+				if (!hasWarnedRef.current) {
+					hasWarnedRef.current = true;
+					if (process.env.NODE_ENV !== 'production') {
+						console.warn('Notifications unavailable:', error);
+					}
+				}
 			}
 		};
 		

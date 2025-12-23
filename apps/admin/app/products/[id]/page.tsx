@@ -2,26 +2,35 @@ import Link from 'next/link';
 import { Button } from '@nts/ui';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
+import { getAdminBaseUrl } from '@/src/lib/base-url';
 
 async function fetchProduct(id: string) {
-  const base = process.env.NEXT_PUBLIC_ADMIN_BASE_URL || `http://localhost:${process.env.PORT ?? '3001'}`;
-  const res = await fetch(`${base}/api/products/${id}`, { cache: 'no-store' });
-  if (!res.ok) return { id };
-  const json = await res.json();
-  return json.data || { id };
+  const base = getAdminBaseUrl();
+  try {
+    const res = await fetch(`${base}/api/products/${id}`, { cache: 'no-store' });
+    if (!res.ok) return { id };
+    const json = await res.json();
+    return json.data || { id };
+  } catch {
+    return { id };
+  }
 }
 
 async function fetchCategories() {
-  const base = process.env.NEXT_PUBLIC_ADMIN_BASE_URL || `http://localhost:${process.env.PORT ?? '3001'}`;
-  const res = await fetch(`${base}/api/categories`, { cache: 'no-store' });
-  if (!res.ok) return [];
-  const json = await res.json();
-  return json.data ?? [];
+  const base = getAdminBaseUrl();
+  try {
+    const res = await fetch(`${base}/api/categories`, { cache: 'no-store' });
+    if (!res.ok) return [];
+    const json = await res.json();
+    return json.data ?? [];
+  } catch {
+    return [];
+  }
 }
 
 async function updateProductAction(id: string, formData: FormData) {
   'use server';
-  const base = process.env.NEXT_PUBLIC_ADMIN_BASE_URL || `http://localhost:${process.env.PORT ?? '3001'}`;
+  const base = getAdminBaseUrl();
   const payload = {
     name: String(formData.get('name') || ''),
     slug: String(formData.get('slug') || ''),
@@ -46,7 +55,7 @@ async function updateProductAction(id: string, formData: FormData) {
 
 async function deleteProductAction(id: string) {
   'use server';
-  const base = process.env.NEXT_PUBLIC_ADMIN_BASE_URL || `http://localhost:${process.env.PORT ?? '3001'}`;
+  const base = getAdminBaseUrl();
   const res = await fetch(`${base}/api/products/${id}?hard=1`, { method: 'DELETE' });
   if (!res.ok) throw new Error(await res.text());
   revalidatePath('/products');
@@ -57,7 +66,7 @@ async function addImageByUrlAction(id: string, formData: FormData) {
   'use server';
   const url = String(formData.get('imageUrl') || '');
   if (!url) return;
-  const base = process.env.NEXT_PUBLIC_ADMIN_BASE_URL || `http://localhost:${process.env.PORT ?? '3001'}`;
+  const base = getAdminBaseUrl();
   await fetch(`${base}/api/products/${id}/images`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -70,7 +79,7 @@ async function removeImageAction(id: string, formData: FormData) {
   'use server';
   const url = String(formData.get('url') || '');
   if (!url) return;
-  const base = process.env.NEXT_PUBLIC_ADMIN_BASE_URL || `http://localhost:${process.env.PORT ?? '3001'}`;
+  const base = getAdminBaseUrl();
   await fetch(`${base}/api/products/${id}/images`, {
     method: 'DELETE',
     headers: { 'content-type': 'application/json' },

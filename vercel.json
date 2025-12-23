@@ -1,7 +1,12 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "buildCommand": "pnpm build",
-  "installCommand": "pnpm install --no-frozen-lockfile",
+  "version": 2,
+  "builds": [
+    {
+      "src": "apps/ecommerce/package.json",
+      "use": "@vercel/next"
+    }
+  ],
   "git": {
     "deploymentsEnabled": true
   },
