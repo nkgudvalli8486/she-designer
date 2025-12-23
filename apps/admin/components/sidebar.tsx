@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { Boxes, Box, Package, PlusCircle, LayoutGrid, ShoppingCart, Users, BarChart3, Image as ImageIcon, Settings } from 'lucide-react';
+import { Boxes, Box, Package, PlusCircle, LayoutGrid, ShoppingCart, Users, BarChart3, Image as ImageIcon, Settings, Bell } from 'lucide-react';
 import { usePathname } from 'next/navigation';
 import clsx from 'clsx';
 
@@ -14,6 +14,7 @@ const items = [
 	{ href: '/inventory', icon: <Box className="h-4 w-4" />, label: 'Inventory' },
 	{ section: 'Operations' },
 	{ href: '/orders', icon: <ShoppingCart className="h-4 w-4" />, label: 'Orders' },
+	{ href: '/notifications', icon: <Bell className="h-4 w-4" />, label: 'Notifications' },
 	{ href: '/customers', icon: <Users className="h-4 w-4" />, label: 'Customers' },
 	{ href: '/analytics', icon: <BarChart3 className="h-4 w-4" />, label: 'Analytics' },
 	{ href: '/media', icon: <ImageIcon className="h-4 w-4" />, label: 'Media Library' },

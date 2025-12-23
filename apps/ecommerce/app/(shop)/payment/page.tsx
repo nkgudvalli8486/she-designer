@@ -43,8 +43,19 @@ async function processCOD(formData: FormData) {
   // Build line items from cart
   const { data: cart } = await supabase
     .from('cart_items')
-    .select('product_id, quantity, products ( name, price_cents, sale_price_cents )')
+    .select('product_id, quantity, attributes, products ( name, price_cents, sale_price_cents )')
     .eq('customer_id', authPayload.userId);
+  
+  // Validate that all cart items have size and height before proceeding
+  const cartItemsWithMissingSize = (cart ?? []).filter((row: any) => {
+    const attributes = row.attributes && typeof row.attributes === 'object' ? row.attributes : {};
+    return !attributes.size || !attributes.height;
+  });
+  
+  if (cartItemsWithMissingSize.length > 0) {
+    throw new Error('Please select size and height for all items in your cart before placing order.');
+  }
+  
   const items = (cart ?? [])
     .map((row: any) => {
       const priceCents = Number(row?.products?.sale_price_cents ?? row?.products?.price_cents ?? 0);
@@ -77,12 +88,17 @@ async function processCOD(formData: FormData) {
     .map((row: any) => {
       const priceCents = Number(row?.products?.sale_price_cents ?? row?.products?.price_cents ?? 0);
       if (priceCents > 0 && row.product_id) {
+        const attributes = row.attributes && typeof row.attributes === 'object' ? row.attributes : {};
+        // Ensure size and height are present (should be validated above, but double-check)
+        if (!attributes.size || !attributes.height) {
+          throw new Error(`Size and height are required for ${row.products?.name || 'product'}`);
+        }
         return {
           product_id: row.product_id,
           name: row.products?.name || 'Unknown Product',
           unit_amount_cents: priceCents,
           quantity: Number(row.quantity) || 1,
-          attributes: {}
+          attributes: attributes
         };
       }
       return null;
@@ -98,6 +114,24 @@ async function processCOD(formData: FormData) {
     metadata: { source: 'ecommerce', payment_method: 'COD' }
   });
 
+  // Deduct stock for COD orders (order is confirmed immediately)
+  try {
+    const { deductStockForOrder } = await import('@/src/lib/stock');
+    await deductStockForOrder(
+      orderItems.map(item => ({
+        product_id: item.product_id,
+        quantity: item.quantity
+      }))
+    );
+  } catch (stockError: any) {
+    // If stock deduction fails, delete the order and redirect with error
+    const supabaseAdmin = getSupabaseAdminClient();
+    await supabaseAdmin.from('orders').delete().eq('id', orderId);
+    // Also delete order items
+    await supabaseAdmin.from('order_items').delete().eq('order_id', orderId);
+    redirect(`/cart?error=${encodeURIComponent(stockError.message || 'Insufficient stock. Please try again.')}`);
+  }
+
   // Update order to mark as COD (unpaid, but confirmed)
   const supabaseAdmin = getSupabaseAdminClient();
   await supabaseAdmin
@@ -107,7 +141,7 @@ async function processCOD(formData: FormData) {
       status: 'pending',
       paid_amount_cents: 0, // COD - no payment received yet
       paid_amount: 0,
-      metadata: { payment_method: 'COD', source: 'ecommerce' }
+      metadata: { payment_method: 'COD', source: 'ecommerce', stock_deducted: true }
     })
     .eq('id', orderId);
 
@@ -157,8 +191,19 @@ async function processUPI(formData: FormData) {
   // Build line items from cart
   const { data: cart } = await supabase
     .from('cart_items')
-    .select('product_id, quantity, products ( name, price_cents, sale_price_cents )')
+    .select('product_id, quantity, attributes, products ( name, price_cents, sale_price_cents )')
     .eq('customer_id', authPayload.userId);
+  
+  // Validate that all cart items have size and height before proceeding
+  const cartItemsWithMissingSize = (cart ?? []).filter((row: any) => {
+    const attributes = row.attributes && typeof row.attributes === 'object' ? row.attributes : {};
+    return !attributes.size || !attributes.height;
+  });
+  
+  if (cartItemsWithMissingSize.length > 0) {
+    throw new Error('Please select size and height for all items in your cart before placing order.');
+  }
+  
   const items = (cart ?? [])
     .map((row: any) => {
       const priceCents = Number(row?.products?.sale_price_cents ?? row?.products?.price_cents ?? 0);
@@ -191,12 +236,17 @@ async function processUPI(formData: FormData) {
     .map((row: any) => {
       const priceCents = Number(row?.products?.sale_price_cents ?? row?.products?.price_cents ?? 0);
       if (priceCents > 0 && row.product_id) {
+        const attributes = row.attributes && typeof row.attributes === 'object' ? row.attributes : {};
+        // Ensure size and height are present (should be validated above, but double-check)
+        if (!attributes.size || !attributes.height) {
+          throw new Error(`Size and height are required for ${row.products?.name || 'product'}`);
+        }
         return {
           product_id: row.product_id,
           name: row.products?.name || 'Unknown Product',
           unit_amount_cents: priceCents,
           quantity: Number(row.quantity) || 1,
-          attributes: {}
+          attributes: attributes
         };
       }
       return null;
@@ -212,6 +262,24 @@ async function processUPI(formData: FormData) {
     metadata: { source: 'ecommerce', payment_method: 'UPI' }
   });
 
+  // Deduct stock for UPI orders (order is confirmed immediately)
+  try {
+    const { deductStockForOrder } = await import('@/src/lib/stock');
+    await deductStockForOrder(
+      orderItems.map(item => ({
+        product_id: item.product_id,
+        quantity: item.quantity
+      }))
+    );
+  } catch (stockError: any) {
+    // If stock deduction fails, delete the order and redirect with error
+    const supabaseAdmin = getSupabaseAdminClient();
+    await supabaseAdmin.from('orders').delete().eq('id', orderId);
+    // Also delete order items
+    await supabaseAdmin.from('order_items').delete().eq('order_id', orderId);
+    redirect(`/cart?error=${encodeURIComponent(stockError.message || 'Insufficient stock. Please try again.')}`);
+  }
+
   // Update order to mark as UPI (unpaid, but confirmed)
   // TODO: Integrate with UPI payment gateway
   const supabaseAdmin = getSupabaseAdminClient();
@@ -222,7 +290,7 @@ async function processUPI(formData: FormData) {
       status: 'pending',
       paid_amount_cents: 0, // UPI - no payment received yet (will be updated when payment gateway confirms)
       paid_amount: 0,
-      metadata: { payment_method: 'UPI', source: 'ecommerce' }
+      metadata: { payment_method: 'UPI', source: 'ecommerce', stock_deducted: true }
     })
     .eq('id', orderId);
 
@@ -271,8 +339,19 @@ async function startPayment(formData: FormData) {
   // Build line items from cart
   const { data: cart } = await supabase
     .from('cart_items')
-    .select('product_id, quantity, products ( name, price_cents, sale_price_cents )')
+    .select('product_id, quantity, attributes, products ( name, price_cents, sale_price_cents )')
     .eq('customer_id', authPayload.userId);
+  
+  // Validate that all cart items have size and height before proceeding
+  const cartItemsWithMissingSize = (cart ?? []).filter((row: any) => {
+    const attributes = row.attributes && typeof row.attributes === 'object' ? row.attributes : {};
+    return !attributes.size || !attributes.height;
+  });
+  
+  if (cartItemsWithMissingSize.length > 0) {
+    throw new Error('Please select size and height for all items in your cart before placing order.');
+  }
+  
   const items = (cart ?? [])
     .map((row: any) => {
       const priceCents = Number(row?.products?.sale_price_cents ?? row?.products?.price_cents ?? 0);
@@ -305,12 +384,17 @@ async function startPayment(formData: FormData) {
     .map((row: any) => {
       const priceCents = Number(row?.products?.sale_price_cents ?? row?.products?.price_cents ?? 0);
       if (priceCents > 0 && row.product_id) {
+        const attributes = row.attributes && typeof row.attributes === 'object' ? row.attributes : {};
+        // Ensure size and height are present (should be validated above, but double-check)
+        if (!attributes.size || !attributes.height) {
+          throw new Error(`Size and height are required for ${row.products?.name || 'product'}`);
+        }
         return {
           product_id: row.product_id,
           name: row.products?.name || 'Unknown Product',
           unit_amount_cents: priceCents,
           quantity: Number(row.quantity) || 1,
-          attributes: {}
+          attributes: attributes
         };
       }
       return null;
@@ -382,7 +466,7 @@ async function fetchContext(searchParams: Promise<{ addressId?: string }>) {
   // Fetch cart directly from database
   const { data: items, error: cartError } = await supabase
     .from('cart_items')
-    .select('product_id, quantity, created_at, products ( name, price_cents, sale_price_cents, original_price_cents )')
+    .select('product_id, quantity, created_at, attributes, products ( name, price_cents, sale_price_cents, original_price_cents )')
     .eq('customer_id', authPayload.userId)
     .order('created_at', { ascending: true });
   

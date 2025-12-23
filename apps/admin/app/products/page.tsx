@@ -13,36 +13,76 @@ type Product = {
 
 type Category = { id: string; name: string; slug: string };
 
+import { getSupabaseAdminClient } from '@/src/lib/supabase-admin';
+
 async function fetchProducts(params: { search?: string; category?: string; page?: number; limit?: number }) {
-  const base = process.env.NEXT_PUBLIC_ADMIN_BASE_URL || `http://localhost:${process.env.PORT ?? '3001'}`;
-  const qs = new URLSearchParams();
-  if (params.search) qs.set('search', params.search);
-  if (params.category) qs.set('category', params.category);
-  qs.set('page', String(params.page ?? 1));
-  qs.set('limit', String(params.limit ?? 20));
-  const res = await fetch(`${base}/api/products?${qs.toString()}`, { cache: 'no-store' });
-  if (!res.ok) return { data: [], total: 0, page: 1, limit: 20 };
-  return res.json();
+  const supabase = getSupabaseAdminClient();
+  const page = params.page ?? 1;
+  const limit = params.limit ?? 20;
+  const from = (page - 1) * limit;
+  const to = from + limit - 1;
+
+  // Resolve category id if provided
+  let categoryId: string | null = null;
+  if (params.category) {
+    const { data: cat } = await supabase.from('categories').select('id').eq('slug', params.category).maybeSingle();
+    categoryId = cat?.id ?? null;
+  }
+
+  let query = supabase
+    .from('products')
+    .select('id, name, slug, sku, price_cents, sale_price_cents, stock', { count: 'exact' })
+    .is('deleted_at', null);
+
+  if (params.search) {
+    query = query.ilike('name', `%${params.search}%`);
+  }
+  if (categoryId) {
+    query = query.eq('category_id', categoryId);
+  }
+
+  const { data, error, count } = await query.order('created_at', { ascending: false }).range(from, to);
+  
+  if (error) {
+    console.error('Error fetching products:', error);
+    return { data: [], total: 0, page, limit };
+  }
+
+  return { data: data || [], total: count ?? 0, page, limit };
 }
 
 async function fetchCategories(): Promise<Category[]> {
-  const base = process.env.NEXT_PUBLIC_ADMIN_BASE_URL || `http://localhost:${process.env.PORT ?? '3001'}`;
-  const res = await fetch(`${base}/api/categories`, { cache: 'no-store' });
-  if (!res.ok) return [];
-  const json = await res.json();
-  return json.data ?? [];
+  const supabase = getSupabaseAdminClient();
+  const { data, error } = await supabase
+    .from('categories')
+    .select('id, name, slug')
+    .is('deleted_at', null)
+    .order('name', { ascending: true });
+  
+  if (error) {
+    console.error('Error fetching categories:', error);
+    return [];
+  }
+  
+  return data || [];
 }
 
 async function updateStockAction(formData: FormData) {
   'use server';
   const id = String(formData.get('id') || '');
   const stock = Number(formData.get('stock') || '0');
-  const base = process.env.NEXT_PUBLIC_ADMIN_BASE_URL || `http://localhost:${process.env.PORT ?? '3001'}`;
-  await fetch(`${base}/api/products/bulk`, {
-    method: 'PATCH',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ updates: [{ id, stock }] })
-  });
+  const { getSupabaseAdminClient } = await import('@/src/lib/supabase-admin');
+  const supabase = getSupabaseAdminClient();
+  
+  const { error } = await supabase
+    .from('products')
+    .update({ stock, updated_at: new Date().toISOString() })
+    .eq('id', id);
+  
+  if (error) {
+    throw new Error(error.message);
+  }
+  
   revalidatePath('/products');
 }
 
@@ -51,11 +91,18 @@ import { revalidatePath } from 'next/cache';
 async function softDeleteAction(formData: FormData) {
   'use server';
   const id = String(formData.get('id') || '');
-  const base = process.env.NEXT_PUBLIC_ADMIN_BASE_URL || `http://localhost:${process.env.PORT ?? '3001'}`;
-  const res = await fetch(`${base}/api/products/${id}?hard=1`, { method: 'DELETE' });
-  if (!res.ok) {
-    throw new Error(await res.text());
+  const { getSupabaseAdminClient } = await import('@/src/lib/supabase-admin');
+  const supabase = getSupabaseAdminClient();
+  
+  const { error } = await supabase
+    .from('products')
+    .delete()
+    .eq('id', id);
+  
+  if (error) {
+    throw new Error(error.message);
   }
+  
   revalidatePath('/products');
 }
 
@@ -85,32 +132,45 @@ export default async function ProductsPage(props: { searchParams: Promise<{ q?: 
       </form>
       <div className="rounded-xl border border-neutral-800 bg-neutral-900 overflow-x-auto">
         <table className="min-w-full text-sm">
-          <thead className="text-left text-neutral-300">
+          <thead className="text-left text-neutral-300 border-b border-neutral-800">
             <tr>
-              <th className="px-4 py-3">Product</th>
-              <th className="px-4 py-3">SKU</th>
-              <th className="px-4 py-3">Price</th>
-              <th className="px-4 py-3">Stock</th>
-              <th className="px-4 py-3">Actions</th>
+              <th className="px-4 py-3 font-semibold">Product</th>
+              <th className="px-4 py-3 font-semibold">SKU</th>
+              <th className="px-4 py-3 font-semibold">Price</th>
+              <th className="px-4 py-3 font-semibold">Stock</th>
+              <th className="px-4 py-3 font-semibold">Actions</th>
             </tr>
           </thead>
           <tbody>
             {(data as Product[]).map((p) => (
-              <tr key={p.id} className="border-t border-neutral-800">
-                <td className="px-4 py-3">{p.name}</td>
-                <td className="px-4 py-3">{p.sku ?? '—'}</td>
-                <td className="px-4 py-3">₹ {(((p.sale_price_cents ?? p.price_cents) ?? 0) / 100).toFixed(0)}</td>
+              <tr key={p.id} className="border-t border-neutral-800 hover:bg-neutral-800/50">
+                <td className="px-4 py-3 text-neutral-200">{p.name}</td>
+                <td className="px-4 py-3 text-neutral-200">{p.sku ?? '—'}</td>
+                <td className="px-4 py-3 text-neutral-200">₹ {(((p.sale_price_cents ?? p.price_cents) ?? 0) / 100).toFixed(0)}</td>
                 <td className="px-4 py-3">
                   <form action={updateStockAction} className="flex items-center gap-2">
                     <input type="hidden" name="id" value={p.id} />
-                    <input
-                      name="stock"
-                      type="number"
-                      defaultValue={p.stock ?? 0}
-                      min={0}
-                      className="w-24 rounded-md border border-neutral-700 bg-neutral-900 text-neutral-200 px-2 py-1"
-                    />
-                    <Button type="submit" variant="outline">Save</Button>
+                    <div className="flex flex-col gap-1">
+                      <div className="flex items-center gap-2">
+                        <input
+                          name="stock"
+                          type="number"
+                          defaultValue={p.stock ?? 0}
+                          min={0}
+                          step={1}
+                          className="w-24 rounded-md border border-neutral-700 bg-neutral-900 text-neutral-200 px-2 py-1"
+                          title="Available stock quantity. You can increase this when new inventory arrives or decrease when items are sold/removed."
+                        />
+                        <span className="text-xs text-neutral-400">units</span>
+                      </div>
+                      <div className="text-xs text-neutral-500">
+                        Current: <span className="font-semibold text-neutral-300">{p.stock ?? 0}</span>
+                        {p.stock !== null && p.stock <= 0 && (
+                          <span className="ml-2 text-red-400">(Out of stock)</span>
+                        )}
+                      </div>
+                    </div>
+                    <Button type="submit" variant="outline" className="whitespace-nowrap">Save</Button>
                   </form>
                 </td>
                 <td className="px-4 py-3 flex items-center gap-3">

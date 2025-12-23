@@ -1,7 +1,7 @@
-import { getSupabaseServerClient } from '@/src/lib/supabase-server';
+import { getSupabaseAdminClient } from '@/src/lib/supabase-admin';
 
 export async function RecentOrders() {
-	const supabase = getSupabaseServerClient();
+	const supabase = getSupabaseAdminClient();
 	
 	// Fetch recent orders with customer and first order item
 	const { data: orders } = await supabase

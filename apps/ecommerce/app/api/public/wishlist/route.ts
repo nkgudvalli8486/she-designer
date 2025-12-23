@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
-import { getSupabaseServerClient } from '@/src/lib/supabase-server';
+import { getSupabaseAdminClient } from '@/src/lib/supabase-admin';
 import { rateLimit } from '@/src/lib/rate-limit';
 import { randomUUID } from 'crypto';
 import { requireAuth } from '@/src/lib/auth-middleware';
@@ -40,7 +40,8 @@ export async function GET(req: NextRequest) {
   if (authResult instanceof NextResponse) return authResult;
   
   const { userId } = authResult;
-  const supabase = getSupabaseServerClient();
+  // Use admin client to bypass RLS (app uses its own auth cookie, not Supabase session)
+  const supabase = getSupabaseAdminClient();
   const { data: items, error } = await supabase
     .from('wishlist_items')
     .select('product_id, created_at')
@@ -97,7 +98,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Missing or invalid productId' }, { status: 400 });
   }
   
-  const supabase = getSupabaseServerClient();
+  // Use admin client to bypass RLS (app uses its own auth cookie, not Supabase session)
+  const supabase = getSupabaseAdminClient();
   
   // Check if item already exists
   const { data: existing } = await supabase
@@ -138,7 +140,8 @@ export async function DELETE(req: NextRequest) {
   const url = new URL(req.url);
   const productId = url.searchParams.get('productId') || '';
   if (!productId) return NextResponse.json({ error: 'Missing productId' }, { status: 400 });
-  const supabase = getSupabaseServerClient();
+  // Use admin client to bypass RLS (app uses its own auth cookie, not Supabase session)
+  const supabase = getSupabaseAdminClient();
   const { error } = await supabase.from('wishlist_items').delete().match({ customer_id: userId, product_id: productId });
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
   return NextResponse.json({ ok: true });

@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import { getAuthToken, verifyAuthToken } from '@/src/lib/auth';
 import { getSupabaseServerClient } from '@/src/lib/supabase-server';
+import { getSupabaseAdminClient } from '@/src/lib/supabase-admin';
 import { CartItems } from '@/components/cart-items';
 
 async function fetchCart() {
@@ -14,10 +15,11 @@ async function fetchCart() {
     redirect('/login?redirect=/cart');
   }
 
-  const supabase = getSupabaseServerClient();
+  // Use admin client for customer-specific tables (app uses its own auth cookie, not Supabase session)
+  const supabase = getSupabaseAdminClient();
   const { data: items, error } = await supabase
     .from('cart_items')
-    .select('product_id, quantity, created_at')
+    .select('product_id, quantity, created_at, attributes')
     .eq('customer_id', authPayload.userId)
     .order('created_at', { ascending: true });
   
@@ -29,9 +31,11 @@ async function fetchCart() {
   if (!items?.length) return [];
 
   const ids = items.map((x) => x.product_id);
-  const { data: products } = await supabase
+  // Products/images can be fetched via server client (public)
+  const supabasePublic = getSupabaseServerClient();
+  const { data: products } = await supabasePublic
     .from('products')
-    .select('id, name, slug, price_cents, sale_price_cents, original_price_cents, product_images (image_url, position)')
+    .select('id, name, slug, price_cents, sale_price_cents, original_price_cents, stock, product_images (image_url, position)')
     .in('id', ids);
 
   const firstImage: Record<string, string | null> = {};
@@ -52,6 +56,7 @@ async function fetchCart() {
     const priceCents = Number(p?.sale_price_cents ?? p?.price_cents ?? 0);
     const originalCents = Number(p?.original_price_cents ?? p?.price_cents ?? priceCents);
     const imageUrl = firstImage[it.product_id];
+    const attributes = (it.attributes && typeof it.attributes === 'object') ? it.attributes : {};
     return {
       productId: it.product_id,
       quantity: it.quantity,
@@ -59,7 +64,9 @@ async function fetchCart() {
       slug: p?.slug,
       price: priceCents / 100,
       originalPrice: originalCents / 100,
-      image: imageUrl ?? undefined
+      image: imageUrl ?? undefined,
+      attributes: attributes,
+      stock: Number(p?.stock ?? 0)
     };
   });
   

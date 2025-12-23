@@ -7,6 +7,7 @@ import { redirect } from 'next/navigation';
 import { retrieveCheckoutSession } from '@nts/integrations';
 import { Suspense } from 'react';
 import { VerifyPayment } from './verify-payment';
+import { deductStockForOrder } from '@/src/lib/stock';
 
 export default async function CheckoutSuccessPage(props: { searchParams: Promise<{ session_id?: string }> }) {
   const token = await getAuthToken();
@@ -31,10 +32,12 @@ export default async function CheckoutSuccessPage(props: { searchParams: Promise
       status,
       payment_status,
       created_at,
+      metadata,
       order_items (
         name,
         quantity,
-        unit_amount_cents
+        unit_amount_cents,
+        product_id
       )
     `)
     .eq('customer_id', authPayload.userId)
@@ -42,116 +45,70 @@ export default async function CheckoutSuccessPage(props: { searchParams: Promise
     .limit(1)
     .single();
 
-  // Skip all processing if order is already paid (prevent unnecessary work)
-  if (recentOrder && recentOrder.payment_status === 'paid') {
-    // Just ensure cart is cleared (should already be, but double-check)
-    const supabaseAdmin = getSupabaseAdminClient();
-    await supabaseAdmin
-      .from('cart_items')
-      .delete()
-      .eq('customer_id', authPayload.userId);
-  } else if (recentOrder && recentOrder.payment_status === 'unpaid') {
-    // Verify payment with Stripe if we have a session_id
-    let paymentVerified = false;
-    let verifiedOrderId: string | null = null;
-    
-    if (sessionId) {
-      try {
-        const session = await retrieveCheckoutSession(sessionId);
-        verifiedOrderId = session.metadata?.orderId as string | undefined || null;
-        paymentVerified = session.payment_status === 'paid' || session.status === 'complete';
-        
-        console.log(`Stripe session verified: payment_status=${session.payment_status}, orderId=${verifiedOrderId}`);
-      } catch (error) {
-        console.error('Error retrieving Stripe session:', error);
-      }
-    }
+  // Verify payment with Stripe if we have a session_id and the order isn't already paid.
+  // IMPORTANT: We never mark orders as paid without Stripe verification.
+  if (recentOrder && sessionId) {
+    try {
+      const session = await retrieveCheckoutSession(sessionId);
+      const verifiedOrderId = (session.metadata?.orderId as string | undefined) || null;
+      const paymentVerified = session.payment_status === 'paid' || session.status === 'complete';
 
-    // Update order and clear cart if:
-    // 1. We have a verified Stripe session showing payment is complete, OR
-    // 2. Order is unpaid and was created recently (within last 15 minutes) - fallback for webhook delays
-    const shouldUpdate = (paymentVerified && verifiedOrderId === recentOrder.id) || 
-      (!sessionId && (Date.now() - new Date(recentOrder.created_at).getTime() < 15 * 60 * 1000));
+      if (paymentVerified && verifiedOrderId && verifiedOrderId === recentOrder.id) {
+        const supabaseAdmin = getSupabaseAdminClient();
+        const paidAmount = session.amount_total || recentOrder.total_cents;
 
-    if (shouldUpdate) {
+        // Update order to paid (if needed)
+        if (recentOrder.payment_status !== 'paid') {
+          const { error: updateError } = await supabaseAdmin
+            .from('orders')
+            .update({
+              payment_status: 'paid',
+              status: 'processing',
+              paid_amount_cents: paidAmount,
+              paid_amount: paidAmount / 100.0,
+              metadata: {
+                ...(((recentOrder as any).metadata && typeof (recentOrder as any).metadata === 'object') ? (recentOrder as any).metadata : {}),
+                stripe_session_id: sessionId
+              }
+            })
+            .eq('id', recentOrder.id);
+
+          if (updateError) {
+            console.error('Error updating order:', updateError);
+          } else {
+            recentOrder.payment_status = 'paid' as any;
+            recentOrder.status = 'processing' as any;
+          }
+        }
+
+        // Deduct stock once (idempotent via metadata flag)
+        const metadata = ((recentOrder as any).metadata && typeof (recentOrder as any).metadata === 'object') ? (recentOrder as any).metadata : {};
+        const alreadyDeducted = metadata?.stock_deducted === true;
+        const items = ((recentOrder as any).order_items || []) as Array<{ product_id: string; quantity: number }>;
+        if (!alreadyDeducted && items.length > 0) {
+          await deductStockForOrder(items.map((it) => ({ product_id: it.product_id, quantity: Number(it.quantity) || 1 })));
+          await supabaseAdmin
+            .from('orders')
+            .update({
+              metadata: {
+                ...metadata,
+                stock_deducted: true,
+                stripe_session_id: sessionId
+              }
+            })
+            .eq('id', recentOrder.id);
+          (recentOrder as any).metadata = { ...metadata, stock_deducted: true, stripe_session_id: sessionId };
+        }
+      }
+    } catch (error) {
+      console.error('Error retrieving Stripe session:', error);
+    }
+  }
+
+  // Always clear cart when landing on success page.
+  if (authPayload?.userId) {
     const supabaseAdmin = getSupabaseAdminClient();
-    
-    // Get payment amount from Stripe session if available
-    let paidAmount = recentOrder.total_cents;
-    if (sessionId && paymentVerified) {
-      try {
-        const session = await retrieveCheckoutSession(sessionId);
-        paidAmount = session.amount_total || recentOrder.total_cents;
-      } catch (error) {
-        console.error('Error getting payment amount from session:', error);
-      }
-    }
-    
-    console.log(`Updating order ${recentOrder.id} to paid (verified: ${paymentVerified}, paidAmount: ${paidAmount})`);
-    
-    // Update order to paid
-    const { error: updateError } = await supabaseAdmin
-      .from('orders')
-      .update({
-        payment_status: 'paid',
-        status: 'processing',
-        paid_amount_cents: paidAmount,
-        paid_amount: paidAmount / 100.0
-      })
-      .eq('id', recentOrder.id);
-    
-    if (updateError) {
-      console.error('Error updating order:', updateError);
-    } else {
-      console.log(`Successfully updated order ${recentOrder.id} to paid`);
-    }
-    
-    // Clear cart - ALWAYS clear if we're on success page
-    console.log(`Clearing cart for customer ${authPayload.userId}`);
-    const { error: cartError, data: deletedItems } = await supabaseAdmin
-      .from('cart_items')
-      .delete()
-      .eq('customer_id', authPayload.userId)
-      .select();
-    
-    if (cartError) {
-      console.error('Error clearing cart:', cartError);
-    } else {
-      console.log(`Cleared ${deletedItems?.length || 0} cart items for customer ${authPayload.userId}`);
-    }
-    
-    // Refetch the order
-    const { data: updatedOrder } = await supabase
-      .from('orders')
-      .select(`
-        id,
-        order_number,
-        total_cents,
-        currency,
-        status,
-        payment_status,
-        created_at,
-        order_items (
-          name,
-          quantity,
-          unit_amount_cents
-        )
-      `)
-      .eq('id', recentOrder.id)
-      .single();
-    
-      if (updatedOrder) {
-        recentOrder = updatedOrder;
-      }
-    } else {
-      // Order is unpaid but we can't verify - still clear cart (user completed checkout)
-      const supabaseAdmin = getSupabaseAdminClient();
-      console.log(`Clearing cart for customer ${authPayload.userId} (unpaid order on success page)`);
-      await supabaseAdmin
-        .from('cart_items')
-        .delete()
-        .eq('customer_id', authPayload.userId);
-    }
+    await supabaseAdmin.from('cart_items').delete().eq('customer_id', authPayload.userId);
   }
 
   return (

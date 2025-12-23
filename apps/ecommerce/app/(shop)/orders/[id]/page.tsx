@@ -27,6 +27,7 @@ async function fetchOrder(orderId: string) {
       *,
       order_items (
         *,
+        attributes,
         products (
           *,
           product_images (*)
@@ -165,8 +166,18 @@ export default async function OrderDetailPage(props: { params: Promise<{ id: str
                       >
                         {item.name || 'Product'}
                       </Link>
-                      <div className="text-sm text-neutral-400 mt-1">
-                        Quantity: {item.quantity || 1}
+                      <div className="text-sm text-neutral-400 mt-1 space-y-1">
+                        <div>Quantity: {item.quantity || 1}</div>
+                        {item.attributes && typeof item.attributes === 'object' && (
+                          <>
+                            {item.attributes.size && (
+                              <div>Size: {item.attributes.size}</div>
+                            )}
+                            {item.attributes.height && (
+                              <div>Height: {item.attributes.height}</div>
+                            )}
+                          </>
+                        )}
                       </div>
                       <div className="mt-2 text-lg font-semibold">
                         ₹{((item.unit_amount_cents || 0) * (item.quantity || 1)) / 100}
@@ -196,6 +207,46 @@ export default async function OrderDetailPage(props: { params: Promise<{ id: str
                 </p>
                 {shippingAddress.country && (
                   <p className="text-neutral-300">{shippingAddress.country}</p>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Tracking Information */}
+          {((order.metadata as any)?.tracking_number || (order.metadata as any)?.tracking_url) && (
+            <div className="mb-6">
+              <h2 className="text-lg font-semibold mb-4">Tracking Information</h2>
+              <div className="bg-neutral-700/50 rounded-lg p-4 space-y-3">
+                {(order.metadata as any)?.tracking_number && (
+                  <div>
+                    <span className="text-neutral-400 text-sm">Tracking Number:</span>
+                    <p className="font-mono text-lg font-semibold text-primary mt-1">
+                      {(order.metadata as any).tracking_number}
+                    </p>
+                  </div>
+                )}
+                {(order.metadata as any)?.tracking_url && (
+                  <div>
+                    <a
+                      href={(order.metadata as any).tracking_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary/90 text-white rounded-lg transition-colors text-sm font-medium"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                      </svg>
+                      Track Package
+                    </a>
+                  </div>
+                )}
+                {(order.metadata as any)?.status_notes && (
+                  <div className="pt-2 border-t border-neutral-600">
+                    <span className="text-neutral-400 text-sm">Status Notes:</span>
+                    <p className="text-neutral-300 mt-1 text-sm">
+                      {(order.metadata as any).status_notes}
+                    </p>
+                  </div>
                 )}
               </div>
             </div>

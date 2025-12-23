@@ -3,12 +3,12 @@
 import { useEffect, useState } from 'react';
 import { User, LogOut, Package } from 'lucide-react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { getAuthTokenClient } from '@/src/lib/auth-client';
 
 interface UserData {
   id: string;
-  phone: string;
+  phone?: string | null;
   name?: string | null;
   email?: string | null;
 }
@@ -18,6 +18,7 @@ export function UserProfile() {
   const [loading, setLoading] = useState(true);
   const [showMenu, setShowMenu] = useState(false);
   const router = useRouter();
+  const pathname = usePathname();
 
   useEffect(() => {
     const loadUser = async () => {
@@ -88,6 +89,19 @@ export function UserProfile() {
     };
   }, []);
 
+  // Safety: ensure any open backdrop/menu is closed on navigation and on Escape
+  useEffect(() => {
+    setShowMenu(false);
+  }, [pathname]);
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setShowMenu(false);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
+
   const handleLogout = async () => {
     // Clear both cookies immediately
     document.cookie = 'auth_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
@@ -140,19 +154,21 @@ export function UserProfile() {
         <div className="flex items-center justify-center w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-primary text-primary-foreground">
           <User size={14} className="sm:w-4 sm:h-4" />
         </div>
-        <span className="text-xs sm:text-sm hidden sm:inline">{user.phone}</span>
+        <span className="text-xs sm:text-sm hidden sm:inline">{user.email || user.name || 'Account'}</span>
       </button>
 
       {showMenu && (
         <>
           <div
-            className="fixed inset-0 z-40"
+            className="fixed inset-0 z-40 bg-transparent"
             onClick={() => setShowMenu(false)}
+            onTouchStart={() => setShowMenu(false)}
+            aria-label="Close menu backdrop"
           />
           <div className="absolute right-0 top-full mt-2 w-48 sm:w-56 rounded-md border border-neutral-800 bg-neutral-900 shadow-lg z-50">
             <div className="p-2">
               <div className="px-3 py-2 text-xs text-neutral-400 border-b border-neutral-800">
-                <div className="font-medium text-neutral-200">{user.phone}</div>
+                <div className="font-medium text-neutral-200">{user.email || user.name || 'Account'}</div>
                 {user.name && <div className="mt-1">{user.name}</div>}
                 {user.email && <div className="mt-1 text-xs">{user.email}</div>}
               </div>

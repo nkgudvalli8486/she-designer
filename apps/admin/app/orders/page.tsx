@@ -1,4 +1,4 @@
-import { getSupabaseServerClient } from '@/src/lib/supabase-server';
+import { getSupabaseAdminClient } from '@/src/lib/supabase-admin';
 import Link from 'next/link';
 import { Suspense } from 'react';
 
@@ -6,7 +6,7 @@ type OrderStatus = 'pending' | 'processing' | 'shipped' | 'delivered' | 'cancell
 type PaymentStatus = 'unpaid' | 'paid' | 'refunded';
 
 async function OrdersList({ statusFilter, paymentFilter }: { statusFilter?: string; paymentFilter?: string }) {
-  const supabase = getSupabaseServerClient();
+  const supabase = getSupabaseAdminClient();
   let query = supabase
     .from('orders')
     .select('id, status, payment_status, total_cents, currency, created_at, customers(name)')
@@ -40,19 +40,19 @@ async function OrdersList({ statusFilter, paymentFilter }: { statusFilter?: stri
   return (
     <div className="mt-6">
       {(!orders || orders.length === 0) ? (
-        <div className="text-muted-foreground text-center py-8">No orders found.</div>
+        <div className="text-neutral-400 text-center py-8">No orders found.</div>
       ) : (
-        <div className="rounded-xl border bg-white overflow-hidden">
+        <div className="rounded-xl border border-neutral-800 bg-neutral-900 overflow-hidden">
           <table className="min-w-full text-sm">
-            <thead className="bg-neutral-50">
+            <thead className="bg-neutral-800 border-b border-neutral-700">
               <tr>
-                <th className="px-4 py-3 text-left font-semibold">Order ID</th>
-                <th className="px-4 py-3 text-left font-semibold">Customer</th>
-                <th className="px-4 py-3 text-left font-semibold">Date</th>
-                <th className="px-4 py-3 text-left font-semibold">Amount</th>
-                <th className="px-4 py-3 text-left font-semibold">Status</th>
-                <th className="px-4 py-3 text-left font-semibold">Payment</th>
-                <th className="px-4 py-3 text-left font-semibold">Actions</th>
+                <th className="px-4 py-3 text-left font-semibold text-neutral-200">Order ID</th>
+                <th className="px-4 py-3 text-left font-semibold text-neutral-200">Customer</th>
+                <th className="px-4 py-3 text-left font-semibold text-neutral-200">Date</th>
+                <th className="px-4 py-3 text-left font-semibold text-neutral-200">Amount</th>
+                <th className="px-4 py-3 text-left font-semibold text-neutral-200">Status</th>
+                <th className="px-4 py-3 text-left font-semibold text-neutral-200">Payment</th>
+                <th className="px-4 py-3 text-left font-semibold text-neutral-200">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -60,10 +60,10 @@ async function OrdersList({ statusFilter, paymentFilter }: { statusFilter?: stri
                 const customerName = o.customers?.name || 'Guest';
                 const shortId = `#${o.id.slice(0, 8).toUpperCase()}`;
                 return (
-                  <tr key={o.id} className="border-t hover:bg-neutral-50">
-                    <td className="px-4 py-3 font-medium">{shortId}</td>
-                    <td className="px-4 py-3">{customerName}</td>
-                    <td className="px-4 py-3 text-muted-foreground">
+                  <tr key={o.id} className="border-t border-neutral-800 hover:bg-neutral-800/50">
+                    <td className="px-4 py-3 font-medium text-neutral-200">{shortId}</td>
+                    <td className="px-4 py-3 text-neutral-200">{customerName}</td>
+                    <td className="px-4 py-3 text-neutral-400">
                       {new Date(o.created_at).toLocaleDateString('en-IN', {
                         year: 'numeric',
                         month: 'short',
@@ -72,7 +72,7 @@ async function OrdersList({ statusFilter, paymentFilter }: { statusFilter?: stri
                         minute: '2-digit'
                       })}
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-3 text-neutral-200">
                       {o.currency.toUpperCase()} {(o.total_cents / 100).toLocaleString()}
                     </td>
                     <td className="px-4 py-3">
@@ -86,7 +86,7 @@ async function OrdersList({ statusFilter, paymentFilter }: { statusFilter?: stri
                       </span>
                     </td>
                     <td className="px-4 py-3">
-                      <Link href={`/orders/${o.id}`} className="text-blue-600 hover:underline text-sm">
+                      <Link href={`/orders/${o.id}`} className="text-pink-400 hover:text-pink-300 hover:underline text-sm">
                         View
                       </Link>
                     </td>

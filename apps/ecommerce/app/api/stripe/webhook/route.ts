@@ -116,6 +116,52 @@ export async function POST(req: NextRequest) {
             console.error('Error updating order status:', updateError);
           } else {
             console.log(`Successfully updated order ${orderId} to paid status`);
+            
+            // Deduct stock for confirmed order (payment successful)
+            try {
+              const { deductStockForOrder } = await import('@/src/lib/stock');
+              
+              // Skip if we already deducted stock for this order
+              const { data: orderMetaRow } = await supabase
+                .from('orders')
+                .select('metadata')
+                .eq('id', orderId)
+                .single();
+              const existingMeta = (orderMetaRow as any)?.metadata && typeof (orderMetaRow as any).metadata === 'object' ? (orderMetaRow as any).metadata : {};
+              if (existingMeta?.stock_deducted === true) {
+                console.log(`Stock already deducted for order ${orderId}, skipping.`);
+              } else {
+              // Fetch order items to get product IDs and quantities
+              const { data: orderItems } = await supabase
+                .from('order_items')
+                .select('product_id, quantity')
+                .eq('order_id', orderId);
+              
+              if (orderItems && orderItems.length > 0) {
+                await deductStockForOrder(
+                  orderItems.map(item => ({
+                    product_id: item.product_id,
+                    quantity: item.quantity
+                  }))
+                );
+                console.log(`Successfully deducted stock for order ${orderId}`);
+                // Mark as deducted to prevent double-deduction (e.g., success-page verification + webhook)
+                await supabase
+                  .from('orders')
+                  .update({
+                    metadata: {
+                      ...existingMeta,
+                      stock_deducted: true
+                    }
+                  })
+                  .eq('id', orderId);
+              }
+              }
+            } catch (stockError: any) {
+              // Log error but don't fail the webhook (order is already confirmed)
+              // In production, you might want to implement a retry mechanism or alert
+              console.error(`Failed to deduct stock for order ${orderId}:`, stockError);
+            }
           }
         }
         

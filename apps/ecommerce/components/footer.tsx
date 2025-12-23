@@ -62,7 +62,7 @@ export function Footer() {
 								<li><Link href="/account" className="hover:text-white">My Account</Link></li>
 								<li><Link href={"/gift-card" as any} className="hover:text-white">Gift Cards</Link></li>
 								<li><Link href="/collections/offers" className="hover:text-white">Latest Offers</Link></li>
-								<li><Link href={"/order-tracking" as any} className="hover:text-white">Order Tracking</Link></li>
+								<li><Link href="/orders" className="hover:text-white">Order Tracking</Link></li>
 							</ul>
 						</div>
 					</div>

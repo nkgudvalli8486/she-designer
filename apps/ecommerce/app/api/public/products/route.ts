@@ -41,8 +41,7 @@ export async function GET(req: NextRequest) {
   let query = supabase
     .from('products')
     .select('id, name, slug, price_cents, sale_price_cents, stock, created_at', { count: 'exact' })
-    .is('deleted_at', null)
-    .eq('is_active', true);
+    .is('deleted_at', null);
 
   if (search) {
     query = query.ilike('name', `%${search}%`);

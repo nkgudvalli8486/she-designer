@@ -2,14 +2,14 @@ import { StatCard } from '@/components/stat-card';
 import { Package, ShoppingCart, Users, IndianRupee } from 'lucide-react';
 import { RecentOrders } from '@/components/recent-orders';
 import Link from 'next/link';
-import { getSupabaseServerClient } from '@/src/lib/supabase-server';
+import { getSupabaseAdminClient } from '@/src/lib/supabase-admin';
 
 export default async function AdminDashboardPage() {
-	const supabase = getSupabaseServerClient();
+	const supabase = getSupabaseAdminClient();
 	
 	// Fetch real stats
 	const [productsResult, ordersResult, customersResult, revenueResult] = await Promise.all([
-		supabase.from('products').select('id', { count: 'exact', head: true }).eq('deleted_at', null),
+		supabase.from('products').select('id', { count: 'exact', head: true }).is('deleted_at', null),
 		supabase.from('orders').select('id', { count: 'exact', head: true }),
 		supabase.from('customers').select('id', { count: 'exact', head: true }),
 		supabase.from('orders').select('total_cents').eq('payment_status', 'paid')

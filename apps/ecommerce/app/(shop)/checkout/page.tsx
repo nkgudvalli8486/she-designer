@@ -23,7 +23,7 @@ async function startCheckout(formData: FormData) {
   const supabase = getSupabaseServerClient();
   const { data: cart } = await supabase
     .from('cart_items')
-    .select('product_id, quantity, products ( name, price_cents, sale_price_cents )')
+    .select('product_id, quantity, attributes, products ( name, price_cents, sale_price_cents )')
     .eq('customer_id', authPayload.userId);
   const items = (cart ?? [])
     .map((row: any) => {
@@ -79,17 +79,33 @@ async function startCheckout(formData: FormData) {
   };
   }
 
+  // Validate that all cart items have size and height before proceeding
+  const cartItemsWithMissingSize = (cart ?? []).filter((row: any) => {
+    const attributes = row.attributes && typeof row.attributes === 'object' ? row.attributes : {};
+    return !attributes.size || !attributes.height;
+  });
+  
+  if (cartItemsWithMissingSize.length > 0) {
+    throw new Error('Please select size and height for all items in your cart before checkout.');
+  }
+
   // Prepare order items from cart
   const orderItems = (cart ?? [])
     .map((row: any) => {
       const priceCents = Number(row?.products?.sale_price_cents ?? row?.products?.price_cents ?? 0);
       if (priceCents > 0 && row.product_id) {
+        const attributes = row.attributes && typeof row.attributes === 'object' ? row.attributes : {};
+        // Ensure size and height are present (should be validated above, but double-check)
+        if (!attributes.size || !attributes.height) {
+          throw new Error(`Size and height are required for ${row.products?.name || 'product'}`);
+        }
         return {
           product_id: row.product_id,
           name: row.products?.name || 'Unknown Product',
           unit_amount_cents: priceCents,
           quantity: Number(row.quantity) || 1,
-          attributes: {}
+          // Copy attributes from cart_items (includes size, height, and custom measurements)
+          attributes: attributes
         };
       }
       return null;

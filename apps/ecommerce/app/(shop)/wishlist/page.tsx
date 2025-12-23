@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import { getAuthToken, verifyAuthToken } from '@/src/lib/auth';
 import { getSupabaseServerClient } from '@/src/lib/supabase-server';
+import { getSupabaseAdminClient } from '@/src/lib/supabase-admin';
 import { WishlistItems } from '@/components/wishlist-items';
 
 async function fetchWishlist() {
@@ -11,7 +12,8 @@ async function fetchWishlist() {
     return { data: [] as any[] };
   }
   
-  const supabase = getSupabaseServerClient();
+  // Use admin client for customer-specific tables (app uses its own auth cookie, not Supabase session)
+  const supabase = getSupabaseAdminClient();
   const { data: items, error } = await supabase
     .from('wishlist_items')
     .select('product_id, created_at')
@@ -21,7 +23,9 @@ async function fetchWishlist() {
   if (error || !items?.length) return { data: [] as any[] };
 
   const ids = items.map((it) => it.product_id);
-  const { data: products } = await supabase
+  // Products/images can be fetched via server client (public)
+  const supabasePublic = getSupabaseServerClient();
+  const { data: products } = await supabasePublic
     .from('products')
     .select('id, name, slug, price_cents, sale_price_cents, product_images (image_url, position)')
     .in('id', ids);

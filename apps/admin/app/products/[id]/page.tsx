@@ -11,12 +11,22 @@ async function fetchProduct(id: string) {
   return json.data || { id };
 }
 
+async function fetchCategories() {
+  const base = process.env.NEXT_PUBLIC_ADMIN_BASE_URL || `http://localhost:${process.env.PORT ?? '3001'}`;
+  const res = await fetch(`${base}/api/categories`, { cache: 'no-store' });
+  if (!res.ok) return [];
+  const json = await res.json();
+  return json.data ?? [];
+}
+
 async function updateProductAction(id: string, formData: FormData) {
   'use server';
   const base = process.env.NEXT_PUBLIC_ADMIN_BASE_URL || `http://localhost:${process.env.PORT ?? '3001'}`;
   const payload = {
     name: String(formData.get('name') || ''),
     slug: String(formData.get('slug') || ''),
+    description: String(formData.get('description') || ''),
+    categoryId: String(formData.get('categoryId') || '') || undefined,
     priceCents: Math.round(Number(formData.get('price') || '0') * 100),
     salePriceCents: String(formData.get('salePrice') || '') ? Math.round(Number(formData.get('salePrice') || '0') * 100) : null,
     stock: Number(formData.get('stock') || '0')
@@ -71,7 +81,7 @@ async function removeImageAction(id: string, formData: FormData) {
 
 export default async function EditProductPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const product = await fetchProduct(id);
+  const [product, categories] = await Promise.all([fetchProduct(id), fetchCategories()]);
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -89,6 +99,19 @@ export default async function EditProductPage({ params }: { params: Promise<{ id
             <label className="text-sm font-medium">Slug</label>
             <input name="slug" defaultValue={product.slug ?? ''} className="w-full rounded-md border border-neutral-700 bg-neutral-900 text-neutral-200 placeholder-neutral-500 px-3 py-2" placeholder="product-slug" />
           </div>
+        </div>
+        <div className="space-y-2">
+          <label className="text-sm font-medium">Description</label>
+          <textarea name="description" defaultValue={product.description ?? ''} className="w-full rounded-md border border-neutral-700 bg-neutral-900 text-neutral-200 placeholder-neutral-500 px-3 py-2" placeholder="Product description" rows={4} />
+        </div>
+        <div className="space-y-2">
+          <label className="text-sm font-medium">Category</label>
+          <select name="categoryId" defaultValue={product.category?.id ?? ''} className="w-full rounded-md border border-neutral-700 bg-neutral-900 text-neutral-200 placeholder-neutral-500 px-3 py-2">
+            <option value="">No Category</option>
+            {categories.map((cat: any) => (
+              <option key={cat.id} value={cat.id}>{cat.name}</option>
+            ))}
+          </select>
         </div>
         <div className="grid gap-4 md:grid-cols-3">
           <div className="space-y-2">

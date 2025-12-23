@@ -8,7 +8,11 @@ import { ToastProvider, ToastContainer } from '@/components/toast';
 
 export const metadata: Metadata = {
   title: 'She Designer – Shop',
-  description: 'Premium ethnic wear and made-to-order fashion.'
+  description: 'Premium ethnic wear and made-to-order fashion.',
+  icons: {
+    icon: '/she-designer-logo.png',
+    apple: '/she-designer-logo.png',
+  },
 };
 
 export default function RootLayout(props: { children: React.ReactNode }) {

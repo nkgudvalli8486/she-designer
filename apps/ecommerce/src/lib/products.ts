@@ -18,7 +18,6 @@ export async function listProductsByCollectionSlug(slug: string) {
     .select('id, name, slug, price_cents, sale_price_cents, stock')
     .eq('category_id', category.id)
     .is('deleted_at', null)
-    .eq('is_active', true)
     .order('created_at', { ascending: false });
   if (prodErr) {
     console.error('Products fetch error', prodErr.message);
@@ -52,7 +51,7 @@ export async function getProductBySlug(slug: string) {
   const supabase = getSupabaseServerClient();
   const { data: product, error } = await supabase
     .from('products')
-    .select('id, name, slug, description, price_cents, sale_price_cents, stock')
+    .select('id, name, slug, sku, description, price_cents, sale_price_cents, stock')
     .eq('slug', slug)
     .is('deleted_at', null)
     .single();
@@ -89,7 +88,6 @@ export async function searchProducts(query: string) {
     .from('products')
     .select('id, name, slug, description, price_cents, sale_price_cents, stock')
     .is('deleted_at', null)
-    .eq('is_active', true)
     .or(`name.ilike.%${searchTerm}%,description.ilike.%${searchTerm}%`)
     .order('created_at', { ascending: false });
     

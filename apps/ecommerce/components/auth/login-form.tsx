@@ -1,22 +1,45 @@
 'use client';
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useEffect, useMemo, useState } from 'react';
 import { useToast } from '@/components/toast';
+import Link from 'next/link';
 
 export function LoginForm() {
-  const [step, setStep] = useState<'phone' | 'otp'>('phone');
-  const [phone, setPhone] = useState('');
-  const [otp, setOtp] = useState('');
+  const [mode, setMode] = useState<'signin' | 'signup'>('signin');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [devOtp, setDevOtp] = useState<string | null>(null);
-  const router = useRouter();
   const { success, error: showError } = useToast();
 
-  const handleSendOTP = async () => {
-    if (!/^[0-9]{10}$/.test(phone)) {
-      const errorMsg = 'Please enter a valid 10-digit phone number';
+  const redirectPath = useMemo(() => {
+    if (typeof window === 'undefined') return '/';
+    const sp = new URLSearchParams(window.location.search);
+    const r = sp.get('redirect');
+    if (r && r.startsWith('/') && !r.startsWith('//')) return r;
+    return '/';
+  }, []);
+
+  useEffect(() => {
+    // Prefill error message from callback redirect (optional)
+    if (typeof window === 'undefined') return;
+    const sp = new URLSearchParams(window.location.search);
+    const err = sp.get('error');
+    if (err) {
+      const msg = decodeURIComponent(err);
+      setError(msg);
+    }
+  }, []);
+
+  const handleEmailAuth = async () => {
+    if (!email || !email.includes('@')) {
+      const errorMsg = 'Please enter a valid email address';
+      setError(errorMsg);
+      showError(errorMsg);
+      return;
+    }
+    if (!password || password.length < 6) {
+      const errorMsg = 'Password must be at least 6 characters';
       setError(errorMsg);
       showError(errorMsg);
       return;
@@ -27,58 +50,19 @@ export function LoginForm() {
       const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone })
+        body: JSON.stringify({ email, password, mode })
       });
       const data = await res.json();
       if (!res.ok) {
-        throw new Error(data.error || 'Failed to send OTP');
-      }
-      // Store dev OTP if provided (for development mode)
-      if (data.devOtp) {
-        setDevOtp(data.devOtp);
-      }
-      success('OTP sent successfully!');
-      setStep('otp');
-    } catch (err) {
-      const errorMsg = (err as Error).message;
-      setError(errorMsg);
-      showError(errorMsg);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleVerifyOTP = async () => {
-    if (!/^[0-9]{6}$/.test(otp)) {
-      const errorMsg = 'Please enter a valid 6-digit OTP';
-      setError(errorMsg);
-      showError(errorMsg);
-      return;
-    }
-    setLoading(true);
-    setError('');
-    try {
-      const res = await fetch('/api/auth/verify', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone, otp })
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || 'Invalid OTP');
+        throw new Error(data.error || 'Login failed');
       }
       // Success - trigger auth change event and redirect
-      success('Login successful!');
-      if (typeof window !== 'undefined') {
-        window.dispatchEvent(new Event('auth:changed'));
-        // Force a full page reload to ensure cookies are available
-        setTimeout(() => {
-          window.location.href = '/';
-        }, 500);
-      } else {
-        router.push('/');
-        router.refresh();
-      }
+      success(mode === 'signup' ? 'Account created!' : 'Login successful!');
+      window.dispatchEvent(new Event('auth:changed'));
+      // Force a full page reload to ensure cookies are available (also avoids typedRoutes issues)
+      setTimeout(() => {
+        window.location.href = redirectPath;
+      }, 500);
     } catch (err) {
       const errorMsg = (err as Error).message;
       setError(errorMsg);
@@ -90,76 +74,59 @@ export function LoginForm() {
 
   return (
     <div className="max-w-md mx-auto rounded-lg border border-neutral-800 bg-neutral-900 p-4 sm:p-6">
-      <h2 className="text-xl sm:text-2xl font-semibold mb-4 sm:mb-6">Login with Mobile</h2>
+      <h2 className="text-xl sm:text-2xl font-semibold mb-2">Login</h2>
+      <p className="text-sm text-neutral-400 mb-4 sm:mb-6">Sign in with Email</p>
       {error && <div className="mb-4 p-3 rounded-md bg-red-900/50 text-red-200 text-sm">{error}</div>}
-      
-      {step === 'phone' ? (
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium mb-2">Mobile Number</label>
-            <input
-              type="tel"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
-              placeholder="10-digit mobile number"
-              maxLength={10}
-              className="w-full rounded-md border border-neutral-700 bg-neutral-800 px-3 py-2 text-neutral-200"
-              disabled={loading}
-            />
-          </div>
-          <button
-            onClick={handleSendOTP}
-            disabled={loading || phone.length !== 10}
-            className="w-full h-10 px-4 rounded-md bg-primary text-primary-foreground disabled:opacity-50"
-          >
-            {loading ? 'Sending...' : 'Send OTP'}
-          </button>
+
+      <div className="space-y-3">
+        <div>
+          <label className="block text-sm font-medium mb-2">Email</label>
+          <input
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="you@gmail.com"
+            className="w-full rounded-md border border-neutral-700 bg-neutral-800 px-3 py-2 text-neutral-200"
+            disabled={loading}
+            autoComplete="email"
+          />
         </div>
-      ) : (
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium mb-2">Enter OTP</label>
-            <input
-              type="text"
-              value={otp}
-              onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
-              placeholder="6-digit OTP"
-              maxLength={6}
-              className="w-full rounded-md border border-neutral-700 bg-neutral-800 px-3 py-2 text-neutral-200"
+        <div>
+          <label className="block text-sm font-medium mb-2">Password</label>
+          <input
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="••••••••"
+            className="w-full rounded-md border border-neutral-700 bg-neutral-800 px-3 py-2 text-neutral-200"
+            disabled={loading}
+            autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
+          />
+          <div className="mt-2 flex items-center justify-between text-xs text-neutral-400">
+            <button
+              type="button"
               disabled={loading}
-            />
-            <p className="mt-2 text-xs text-neutral-400">OTP sent to +91 {phone}. Please check your mobile.</p>
-            {devOtp && (
-              <div className="mt-3 p-3 rounded-md bg-yellow-900/30 border border-yellow-800">
-                <p className="text-xs text-yellow-200 font-medium mb-1">Development Mode</p>
-                <p className="text-sm text-yellow-100">Your OTP is: <span className="font-mono font-bold text-lg">{devOtp}</span></p>
-                <p className="text-xs text-yellow-300/70 mt-1">In production with SMS configured, this will be sent via SMS</p>
-              </div>
+              onClick={() => setMode((m) => (m === 'signin' ? 'signup' : 'signin'))}
+              className="underline underline-offset-2 hover:text-neutral-200"
+            >
+              {mode === 'signin' ? 'Create an account' : 'I already have an account'}
+            </button>
+            {mode === 'signin' && (
+              <Link href={`/forgot-password?redirect=${encodeURIComponent(redirectPath)}`} className="underline underline-offset-2 hover:text-neutral-200">
+                Forgot password?
+              </Link>
             )}
           </div>
-          <div className="flex gap-2">
-            <button
-              onClick={() => {
-                setStep('phone');
-                setOtp('');
-                setError('');
-                setDevOtp(null);
-              }}
-              disabled={loading}
-              className="flex-1 h-10 px-4 rounded-md border border-neutral-700 bg-neutral-800 text-neutral-200"
-            >
-              Change Number
-            </button>
-            <button
-              onClick={handleVerifyOTP}
-              disabled={loading || otp.length !== 6}
-              className="flex-1 h-10 px-4 rounded-md bg-primary text-primary-foreground disabled:opacity-50"
-            >
-              {loading ? 'Verifying...' : 'Verify OTP'}
-            </button>
-          </div>
         </div>
-      )}
+
+        <button
+          onClick={handleEmailAuth}
+          disabled={loading}
+          className="w-full h-10 px-4 rounded-md bg-primary text-primary-foreground disabled:opacity-50"
+        >
+          {loading ? 'Please wait…' : mode === 'signup' ? 'Create account' : 'Login'}
+        </button>
+      </div>
     </div>
   );
 }

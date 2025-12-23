@@ -109,14 +109,28 @@ function SearchContent() {
           {products.map((p: any) => {
             const img = (p.product_images?.[0]?.url as string) || '';
             const priceCents = p.sale_price_cents ?? p.price_cents ?? 0;
+            const outOfStock = (p.stock ?? 0) <= 0;
             return (
               <div
                 key={p.id}
                 className="group rounded-lg overflow-hidden border border-neutral-800 bg-neutral-900 hover:shadow-lg transition-shadow"
               >
                 <div className="relative aspect-[3/4] w-full overflow-hidden bg-neutral-800">
-                  {img ? <img src={img} alt={p.name} className="h-full w-full object-cover" /> : null}
+                  {img ? (
+                    <img
+                      src={img}
+                      alt={p.name}
+                      className={`h-full w-full object-cover ${outOfStock ? 'opacity-60 grayscale' : ''}`}
+                    />
+                  ) : null}
                   <PlpHoverActions productId={p.id} slug={p.slug} />
+                  {outOfStock && (
+                    <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center bg-black/55">
+                      <span className="rounded-md bg-black/60 px-3 py-1 text-xs font-semibold tracking-wide text-white">
+                        Out of Stock
+                      </span>
+                    </div>
+                  )}
                   <Link href={`/products/${p.slug}`} className="absolute inset-0 z-0" aria-label={p.name} />
                 </div>
                 <div className="p-2 sm:p-3">

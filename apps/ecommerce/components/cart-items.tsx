@@ -13,6 +13,8 @@ interface CartItem {
   price: number;
   quantity: number;
   image?: string;
+  attributes?: Record<string, unknown>;
+  stock?: number;
 }
 
 interface CartItemsProps {
@@ -21,6 +23,12 @@ interface CartItemsProps {
 }
 
 export function CartItems({ items, subtotal }: CartItemsProps) {
+  // Check if all items have size and height
+  const allItemsHaveSize = items.every((it) => {
+    const attrs = it.attributes && typeof it.attributes === 'object' ? it.attributes : {};
+    return attrs.size && attrs.height;
+  });
+  
   if (items.length === 0) {
     return (
       <div className="md:col-span-3 flex flex-col items-center justify-center py-12 sm:py-16 px-4">
@@ -53,11 +61,23 @@ export function CartItems({ items, subtotal }: CartItemsProps) {
               </div>
               <div className="min-w-0 flex-1">
                 <div className="font-medium truncate text-sm sm:text-base">{it.name}</div>
-                <div className="text-xs sm:text-sm text-neutral-400"><Price amount={it.price} /></div>
+                <div className="text-xs sm:text-sm text-neutral-400 space-y-0.5">
+                  <div><Price amount={it.price} /></div>
+                  {it.attributes && typeof it.attributes === 'object' && (
+                    <>
+                      {it.attributes.size && (
+                        <div className="text-neutral-500">Size: {String(it.attributes.size)}</div>
+                      )}
+                      {it.attributes.height && (
+                        <div className="text-neutral-500">Height: {String(it.attributes.height)}</div>
+                      )}
+                    </>
+                  )}
+                </div>
               </div>
             </Link>
             <div className="flex items-center justify-between sm:justify-end gap-4 w-full sm:w-auto">
-              <CartItemControls productId={it.productId} quantity={it.quantity} />
+              <CartItemControls productId={it.productId} quantity={it.quantity} stock={it.stock} />
               <div className="text-sm sm:text-base font-medium"><Price amount={it.price * it.quantity} /></div>
             </div>
           </div>
@@ -69,10 +89,15 @@ export function CartItems({ items, subtotal }: CartItemsProps) {
           <span>Subtotal</span>
           <span><Price amount={subtotal} /></span>
         </div>
+        {!allItemsHaveSize && items.length > 0 && (
+          <div className="p-3 rounded-md bg-yellow-500/10 border border-yellow-500/20 text-yellow-300 text-sm">
+            Please select size and height for all items before checkout.
+          </div>
+        )}
         <Link
-          href={items.length > 0 ? '/checkout' : '#'}
-          className={`h-10 w-full inline-flex items-center justify-center rounded-md text-primary-foreground text-sm sm:text-base ${items.length > 0 ? 'bg-primary' : 'bg-neutral-800 cursor-not-allowed'}`}
-          aria-disabled={items.length === 0}
+          href={items.length > 0 && allItemsHaveSize ? '/checkout' : '#'}
+          className={`h-10 w-full inline-flex items-center justify-center rounded-md text-primary-foreground text-sm sm:text-base ${items.length > 0 && allItemsHaveSize ? 'bg-primary' : 'bg-neutral-800 cursor-not-allowed opacity-50'}`}
+          aria-disabled={items.length === 0 || !allItemsHaveSize}
         >
           Proceed to checkout
         </Link>

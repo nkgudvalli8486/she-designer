@@ -1,11 +1,12 @@
-import { getSupabaseServerClient } from '@/src/lib/supabase-server';
+import { getSupabaseAdminClient } from '@/src/lib/supabase-admin';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { CancelOrderButtonAdmin } from '@/components/cancel-order-button-admin';
+import { OrderStatusUpdateForm } from '@/components/order-status-update-form';
 
 export default async function OrderDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const supabase = getSupabaseServerClient();
+  const supabase = getSupabaseAdminClient();
 
   const { data: order } = await supabase
     .from('orders')
@@ -23,6 +24,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
         unit_amount_cents,
         quantity,
         product_id,
+        attributes,
         products (
           id,
           name,
@@ -79,20 +81,20 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
 
       <div className="grid gap-6 md:grid-cols-2">
         {/* Order Details */}
-        <div className="rounded-xl border bg-white p-6">
-          <h2 className="text-lg font-semibold mb-4">Order Details</h2>
+        <div className="rounded-xl border border-neutral-800 bg-neutral-900 p-6">
+          <h2 className="text-lg font-semibold mb-4 text-neutral-200">Order Details</h2>
           <div className="space-y-2 text-sm">
             <div className="flex justify-between">
-              <span className="text-muted-foreground">Order ID:</span>
-              <span className="font-mono">{id}</span>
+              <span className="text-neutral-400">Order ID:</span>
+              <span className="font-mono text-neutral-200">{id}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-muted-foreground">Date:</span>
-              <span>{new Date(order.created_at).toLocaleString('en-IN')}</span>
+              <span className="text-neutral-400">Date:</span>
+              <span className="text-neutral-200">{new Date(order.created_at).toLocaleString('en-IN')}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-muted-foreground">Total:</span>
-              <span className="font-semibold">
+              <span className="text-neutral-400">Total:</span>
+              <span className="font-semibold text-neutral-200">
                 {order.currency.toUpperCase()} {(order.total_cents / 100).toLocaleString()}
               </span>
             </div>
@@ -124,43 +126,57 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
                 <span className="text-xs capitalize">{order.refund_reason.replace(/_/g, ' ')}</span>
               </div>
             )}
-            {order.metadata && (
+            {(order.metadata as any)?.tracking_number && (
               <div className="flex justify-between">
-                <span className="text-muted-foreground">Metadata:</span>
-                <span className="text-xs font-mono">{JSON.stringify(order.metadata)}</span>
+                <span className="text-muted-foreground">Tracking Number:</span>
+                <span className="font-mono text-sm">{(order.metadata as any).tracking_number}</span>
+              </div>
+            )}
+            {(order.metadata as any)?.tracking_url && (
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Tracking URL:</span>
+                <a href={(order.metadata as any).tracking_url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline text-sm">
+                  Track Package
+                </a>
+              </div>
+            )}
+            {(order.metadata as any)?.status_notes && (
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Status Notes:</span>
+                <span className="text-xs">{(order.metadata as any).status_notes}</span>
               </div>
             )}
           </div>
         </div>
 
         {/* Customer Details */}
-        <div className="rounded-xl border bg-white p-6">
-          <h2 className="text-lg font-semibold mb-4">Customer</h2>
+        <div className="rounded-xl border border-neutral-800 bg-neutral-900 p-6">
+          <h2 className="text-lg font-semibold mb-4 text-neutral-200">Customer</h2>
           {customer ? (
             <div className="space-y-2 text-sm">
               <div>
-                <span className="text-muted-foreground">Name: </span>
-                <span>{customer.name || 'N/A'}</span>
+                <span className="text-neutral-400">Name: </span>
+                <span className="text-neutral-200">{customer.name || 'N/A'}</span>
               </div>
               <div>
-                <span className="text-muted-foreground">Email: </span>
-                <span>{customer.email || 'N/A'}</span>
+                <span className="text-neutral-400">Email: </span>
+                <span className="text-neutral-200">{customer.email || 'N/A'}</span>
               </div>
               <div>
-                <span className="text-muted-foreground">Phone: </span>
-                <span>{customer.phone || 'N/A'}</span>
+                <span className="text-neutral-400">Phone: </span>
+                <span className="text-neutral-200">{customer.phone || 'N/A'}</span>
               </div>
             </div>
           ) : (
-            <div className="text-sm text-muted-foreground">Guest customer</div>
+            <div className="text-sm text-neutral-400">Guest customer</div>
           )}
         </div>
 
         {/* Shipping Address */}
         {shippingAddress && (
-          <div className="rounded-xl border bg-white p-6 md:col-span-2">
-            <h2 className="text-lg font-semibold mb-4">Shipping Address</h2>
-            <div className="text-sm space-y-1">
+          <div className="rounded-xl border border-neutral-800 bg-neutral-900 p-6 md:col-span-2">
+            <h2 className="text-lg font-semibold mb-4 text-neutral-200">Shipping Address</h2>
+            <div className="text-sm space-y-1 text-neutral-200">
               <div>{shippingAddress.name}</div>
               <div>{shippingAddress.address1}</div>
               {shippingAddress.address2 && <div>{shippingAddress.address2}</div>}
@@ -177,49 +193,58 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
         )}
 
         {/* Order Items */}
-        <div className="rounded-xl border bg-white p-6 md:col-span-2">
-          <h2 className="text-lg font-semibold mb-4">Order Items</h2>
+        <div className="rounded-xl border border-neutral-800 bg-neutral-900 p-6 md:col-span-2">
+          <h2 className="text-lg font-semibold mb-4 text-neutral-200">Order Items</h2>
           {orderItems.length > 0 ? (
             <div className="overflow-x-auto">
               <table className="min-w-full text-sm">
-                <thead className="bg-neutral-50">
+                <thead className="bg-neutral-800 border-b border-neutral-700">
                   <tr>
-                    <th className="px-4 py-2 text-left">Product</th>
-                    <th className="px-4 py-2 text-left">SKU</th>
-                    <th className="px-4 py-2 text-right">Quantity</th>
-                    <th className="px-4 py-2 text-right">Unit Price</th>
-                    <th className="px-4 py-2 text-right">Total</th>
+                    <th className="px-4 py-2 text-left text-neutral-200">Product</th>
+                    <th className="px-4 py-2 text-left text-neutral-200">SKU</th>
+                    <th className="px-4 py-2 text-left text-neutral-200">Size</th>
+                    <th className="px-4 py-2 text-left text-neutral-200">Height</th>
+                    <th className="px-4 py-2 text-right text-neutral-200">Quantity</th>
+                    <th className="px-4 py-2 text-right text-neutral-200">Unit Price</th>
+                    <th className="px-4 py-2 text-right text-neutral-200">Total</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {orderItems.map((item: any) => (
-                    <tr key={item.id} className="border-t">
-                      <td className="px-4 py-2">
-                        {item.products ? (
-                          <Link href={`/products/${item.products.id}`} className="text-blue-600 hover:underline">
-                            {item.name}
-                          </Link>
-                        ) : (
-                          item.name
-                        )}
-                      </td>
-                      <td className="px-4 py-2 text-muted-foreground">
-                        {item.products?.sku || 'N/A'}
-                      </td>
-                      <td className="px-4 py-2 text-right">{item.quantity}</td>
-                      <td className="px-4 py-2 text-right">
-                        ₹{(item.unit_amount_cents / 100).toLocaleString()}
-                      </td>
-                      <td className="px-4 py-2 text-right font-semibold">
-                        ₹{((item.unit_amount_cents * item.quantity) / 100).toLocaleString()}
-                      </td>
-                    </tr>
-                  ))}
+                  {orderItems.map((item: any) => {
+                    const attributes = (item.attributes && typeof item.attributes === 'object') ? item.attributes : {};
+                    const size = attributes.size || 'N/A';
+                    const height = attributes.height || 'N/A';
+                    return (
+                      <tr key={item.id} className="border-t border-neutral-800 hover:bg-neutral-800/50">
+                        <td className="px-4 py-2 text-neutral-200">
+                          {item.products ? (
+                            <Link href={`/products/${item.products.id}`} className="text-pink-400 hover:text-pink-300 hover:underline">
+                              {item.name}
+                            </Link>
+                          ) : (
+                            item.name
+                          )}
+                        </td>
+                        <td className="px-4 py-2 text-neutral-400">
+                          {item.products?.sku || 'N/A'}
+                        </td>
+                        <td className="px-4 py-2 text-neutral-300">{size}</td>
+                        <td className="px-4 py-2 text-neutral-300">{height}</td>
+                        <td className="px-4 py-2 text-right text-neutral-200">{item.quantity}</td>
+                        <td className="px-4 py-2 text-right text-neutral-200">
+                          ₹{(item.unit_amount_cents / 100).toLocaleString()}
+                        </td>
+                        <td className="px-4 py-2 text-right font-semibold text-neutral-200">
+                          ₹{((item.unit_amount_cents * item.quantity) / 100).toLocaleString()}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
-                <tfoot className="bg-neutral-50">
+                <tfoot className="bg-neutral-800 border-t border-neutral-700">
                   <tr>
-                    <td colSpan={4} className="px-4 py-2 text-right font-semibold">Total:</td>
-                    <td className="px-4 py-2 text-right font-semibold">
+                    <td colSpan={6} className="px-4 py-2 text-right font-semibold text-neutral-200">Total:</td>
+                    <td className="px-4 py-2 text-right font-semibold text-neutral-200">
                       {order.currency.toUpperCase()} {(order.total_cents / 100).toLocaleString()}
                     </td>
                   </tr>
@@ -227,14 +252,14 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
               </table>
             </div>
           ) : (
-            <div className="text-sm text-muted-foreground">No items found.</div>
+            <div className="text-sm text-neutral-400">No items found.</div>
           )}
         </div>
         
         {/* Refund Information */}
         {(order.payment_status === 'refunded' || (order.status === 'cancelled' && order.paid_amount_cents > 0)) && (
-          <div className="rounded-xl border bg-white p-6 md:col-span-2">
-            <h2 className="text-lg font-semibold mb-4">Refund Information</h2>
+          <div className="rounded-xl border border-neutral-800 bg-neutral-900 p-6 md:col-span-2">
+            <h2 className="text-lg font-semibold mb-4 text-neutral-200">Refund Information</h2>
             {order.payment_status === 'refunded' ? (
               <div className="space-y-2 text-sm">
                 <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
@@ -289,8 +314,9 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
         )}
       </div>
 
-      {/* Cancel Order Button (Admin) */}
-      <div className="mt-6">
+      {/* Order Actions */}
+      <div className="mt-6 space-y-4">
+        <OrderStatusUpdateForm orderId={order.id} currentStatus={order.status} />
         <CancelOrderButtonAdmin orderId={order.id} orderStatus={order.status} />
       </div>
     </div>

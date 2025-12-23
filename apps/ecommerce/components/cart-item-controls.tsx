@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { getAuthHeaders } from '@/src/lib/auth-client';
 import { useToast } from '@/components/toast';
 
-export function CartItemControls(props: { productId: string; quantity: number }) {
+export function CartItemControls(props: { productId: string; quantity: number; stock?: number }) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const { success, error } = useToast();
@@ -13,6 +13,23 @@ export function CartItemControls(props: { productId: string; quantity: number })
   async function update(op: 'inc' | 'dec' | 'set', qty?: number) {
     try {
       setLoading(true);
+      
+      // Validate stock before increasing
+      if (op === 'inc' && props.stock !== undefined) {
+        if (props.quantity >= props.stock) {
+          error(`Only ${props.stock} item${props.stock === 1 ? '' : 's'} available in stock`);
+          return;
+        }
+      }
+      
+      // Validate stock when setting quantity
+      if (op === 'set' && qty !== undefined && props.stock !== undefined) {
+        if (qty > props.stock) {
+          error(`Only ${props.stock} item${props.stock === 1 ? '' : 's'} available in stock`);
+          return;
+        }
+      }
+      
       const res = await fetch('/api/public/cart', {
         method: 'PATCH',
         headers: { 'content-type': 'application/json', ...getAuthHeaders() },
@@ -27,7 +44,8 @@ export function CartItemControls(props: { productId: string; quantity: number })
       } else if (res.status === 401) {
         router.push('/login?redirect=/cart');
       } else {
-        error('Failed to update cart. Please try again.');
+        const errorData = await res.json().catch(() => ({}));
+        error(errorData.error || 'Failed to update cart. Please try again.');
       }
     } finally {
       setLoading(false);
@@ -71,9 +89,10 @@ export function CartItemControls(props: { productId: string; quantity: number })
         <div className="px-2 sm:px-3 text-xs sm:text-sm select-none min-w-[2rem] text-center">{props.quantity}</div>
         <button
           className="h-8 w-8 disabled:opacity-50 text-sm sm:text-base"
-          disabled={loading}
+          disabled={loading || (props.stock !== undefined && props.quantity >= props.stock)}
           onClick={() => update('inc')}
           aria-label="Increase quantity"
+          title={props.stock !== undefined && props.quantity >= props.stock ? `Only ${props.stock} available` : undefined}
         >
           +
         </button>

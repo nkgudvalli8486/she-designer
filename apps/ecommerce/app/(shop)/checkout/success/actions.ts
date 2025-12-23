@@ -2,8 +2,8 @@
 
 import { getAuthToken, verifyAuthToken } from '@/src/lib/auth';
 import { getSupabaseAdminClient } from '@/src/lib/supabase-admin';
-import { redirect } from 'next/navigation';
 import { retrieveCheckoutSession } from '@nts/integrations';
+import { deductStockForOrder } from '@/src/lib/stock';
 
 export async function verifyAndUpdateOrder(sessionId?: string, orderId?: string) {
   const token = await getAuthToken();
@@ -23,10 +23,19 @@ export async function verifyAndUpdateOrder(sessionId?: string, orderId?: string)
       const isPaid = session.payment_status === 'paid' || session.status === 'complete';
       
       if (isPaid && verifiedOrderId) {
-        // Fetch order
+        // Fetch order + items (needed for stock deduction)
         const { data: order } = await supabaseAdmin
           .from('orders')
-          .select('total_cents, payment_status')
+          .select(`
+            id,
+            total_cents,
+            payment_status,
+            metadata,
+            order_items (
+              product_id,
+              quantity
+            )
+          `)
           .eq('id', verifiedOrderId)
           .eq('customer_id', authPayload.userId)
           .single();
@@ -41,7 +50,29 @@ export async function verifyAndUpdateOrder(sessionId?: string, orderId?: string)
               payment_status: 'paid',
               status: 'processing',
               paid_amount_cents: paidAmount,
-              paid_amount: paidAmount / 100.0
+              paid_amount: paidAmount / 100.0,
+              metadata: {
+                ...(((order as any).metadata && typeof (order as any).metadata === 'object') ? (order as any).metadata : {}),
+                stripe_session_id: sessionId
+              }
+            })
+            .eq('id', verifiedOrderId);
+        }
+
+        // Deduct stock once (idempotent via metadata flag)
+        const metadata = ((order as any)?.metadata && typeof (order as any).metadata === 'object') ? (order as any).metadata : {};
+        const alreadyDeducted = metadata?.stock_deducted === true;
+        const items = ((order as any)?.order_items || []) as Array<{ product_id: string; quantity: number }>;
+        if (!alreadyDeducted && items.length > 0) {
+          await deductStockForOrder(items.map((it) => ({ product_id: it.product_id, quantity: Number(it.quantity) || 1 })));
+          await supabaseAdmin
+            .from('orders')
+            .update({
+              metadata: {
+                ...metadata,
+                stock_deducted: true,
+                stripe_session_id: sessionId
+              }
             })
             .eq('id', verifiedOrderId);
         }
@@ -56,39 +87,6 @@ export async function verifyAndUpdateOrder(sessionId?: string, orderId?: string)
       }
     } catch (error) {
       console.error('Error verifying Stripe session:', error);
-    }
-  }
-  
-  // Fallback: Update most recent unpaid order if provided
-  if (orderId) {
-    const { data: order } = await supabaseAdmin
-      .from('orders')
-      .select('total_cents, payment_status, created_at')
-      .eq('id', orderId)
-      .eq('customer_id', authPayload.userId)
-      .single();
-    
-    if (order && order.payment_status === 'unpaid') {
-      const orderAge = Date.now() - new Date(order.created_at).getTime();
-      if (orderAge < 15 * 60 * 1000) { // Within 15 minutes
-        await supabaseAdmin
-          .from('orders')
-          .update({
-            payment_status: 'paid',
-            status: 'processing',
-            paid_amount_cents: order.total_cents,
-            paid_amount: order.total_cents / 100.0
-          })
-          .eq('id', orderId);
-        
-        // Clear cart
-        await supabaseAdmin
-          .from('cart_items')
-          .delete()
-          .eq('customer_id', authPayload.userId);
-        
-        return { success: true, orderId };
-      }
     }
   }
   

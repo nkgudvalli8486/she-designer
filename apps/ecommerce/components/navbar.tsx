@@ -186,8 +186,12 @@ export function Navbar() {
           >
             {open ? <X size={18} /> : <Menu size={18} />}
           </button>
-          <Link href="/" className="text-xl font-semibold tracking-tight">
-            She Designer
+          <Link href="/" className="flex items-center">
+            <img 
+              src="/she-designer-logo.png" 
+              alt="She Designer" 
+              className="h-8 w-auto object-contain"
+            />
           </Link>
         </div>
         

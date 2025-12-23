@@ -5,13 +5,13 @@ const SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'your-secret-k
 
 export interface AuthPayload {
   userId: string;
-  phone: string;
+  email?: string | null;
   iat?: number;
   exp?: number;
 }
 
-export async function createAuthToken(userId: string, phone: string): Promise<string> {
-  const token = await new SignJWT({ userId, phone })
+export async function createAuthToken(userId: string, email?: string | null): Promise<string> {
+  const token = await new SignJWT({ userId, email: email ?? null })
     .setProtectedHeader({ alg: 'HS256' })
     .setIssuedAt()
     .setExpirationTime('30d')
